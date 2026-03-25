@@ -1,0 +1,36 @@
+{
+  "source": "repo_bootstrap",
+  "source_version": "2026-03-26",
+  "entries": [
+    {
+      "file": "trading_calendar.json",
+      "source_url": "https://example.invalid/exchange-calendar",
+      "source_hash": "0E0DB05A9B8AC2EEC1A4546D7D5CCDB9F93EFA4F86B8F6E68B8D6024D81B9F86",
+      "reviewed_at": "2026-03-26T00:00:00+08:00"
+    },
+    {
+      "file": "market_rules.json",
+      "source_url": "https://example.invalid/exchange-rulebook",
+      "source_hash": "C07B89E17F0DB877DB9F89C5F232D3F81702264E928FBD76B0AA9E27CACBE9E8",
+      "reviewed_at": "2026-03-26T00:00:00+08:00"
+    },
+    {
+      "file": "instrument_keys.csv",
+      "source_url": "https://example.invalid/instrument-master",
+      "source_hash": "0BDBF9362FD0B945B381BE5A23B23842C6A1A95970697CB846748F14E92A1032",
+      "reviewed_at": "2026-03-26T00:00:00+08:00"
+    },
+    {
+      "file": "instruments.csv",
+      "source_url": "https://example.invalid/instrument-master",
+      "source_hash": "D4A2716F5A64D01A85E324C1A0C4B98574706ABF105B3305188B8E72246EFC72",
+      "reviewed_at": "2026-03-26T00:00:00+08:00"
+    },
+    {
+      "file": "cost_profiles.csv",
+      "source_url": "https://example.invalid/cost-public-fees",
+      "source_hash": "FE234D84E51BA0CC20E5F67D465788CE5F2CD7907AECF9216207172AD4ACD092",
+      "reviewed_at": "2026-03-26T00:00:00+08:00"
+    }
+  ]
+}

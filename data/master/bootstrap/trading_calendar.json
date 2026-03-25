@@ -1,0 +1,17 @@
+{
+  "source": "exchange_manual_snapshot",
+  "source_version": "2026-03-26",
+  "calendars": [
+    {
+      "exchange": "SSE",
+      "closed_dates": ["2026-01-01", "2026-02-16", "2026-10-01", "2026-10-02"],
+      "special_open_dates": []
+    },
+    {
+      "exchange": "SZSE",
+      "closed_dates": ["2026-01-01", "2026-02-16", "2026-10-01", "2026-10-02"],
+      "special_open_dates": []
+    }
+  ]
+}
+

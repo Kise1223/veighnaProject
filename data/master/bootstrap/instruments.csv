@@ -1,0 +1,9 @@
+instrument_key,exchange,symbol,instrument_type,board,list_date,delist_date,settlement_type,pricetick,min_buy_lot,odd_lot_sell_only,limit_pct,ipo_free_limit_days,after_hours_fixed_price_supported,source,source_version,effective_from,effective_to
+EQ_SH_600000,SSE,600000,EQUITY,MAIN,1999-11-10,,T1,0.01,100,true,0.10,5,false,bootstrap_manual,2026-03-26,2025-01-01,
+EQ_SZ_000001,SZSE,000001,EQUITY,MAIN,1991-04-03,,T1,0.01,100,true,0.10,5,false,bootstrap_manual,2026-03-26,2025-01-01,
+EQ_SZ_300750,SZSE,300750,EQUITY,GEM,2018-06-11,,T1,0.01,100,true,0.20,5,true,bootstrap_manual,2026-03-26,2025-01-01,
+EQ_SH_688001,SSE,688001,EQUITY,STAR,2019-07-22,,T1,0.01,100,true,0.20,5,true,bootstrap_manual,2026-03-26,2025-01-01,
+ETF_SH_510300,SSE,510300,ETF,ETF,2012-05-28,,T1,0.001,100,false,0.10,0,false,bootstrap_manual,2026-03-26,2025-01-01,
+ETF_SH_513100,SSE,513100,ETF,ETF,2013-04-16,,T0,0.001,100,false,0.10,0,false,bootstrap_manual,2026-03-26,2025-01-01,
+ETF_SZ_159915,SZSE,159915,ETF,ETF,2011-12-09,,T1,0.001,100,false,0.10,0,false,bootstrap_manual,2026-03-26,2025-01-01,
+

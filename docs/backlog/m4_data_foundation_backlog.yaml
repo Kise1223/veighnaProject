@@ -1,0 +1,160 @@
+project: aquant
+phase: M4
+title: Data recording, standard ETL, and Qlib provider build
+status: planned
+depends_on:
+  - M0
+  - M1
+  - M2
+  - M3
+scope:
+  include:
+    - SSE cash equities
+    - SZSE cash equities
+    - ETF
+    - tick recording
+    - 1m bar build
+    - daily bar build
+    - adjustment factors
+    - qlib provider export
+    - data quality checks
+    - replay sample
+  exclude:
+    - BSE
+    - convertible bonds
+    - margin trading
+    - options
+    - clickhouse
+    - model training
+principles:
+  - raw_append_only
+  - standard_rebuildable
+  - research_trade_decoupled
+  - parquet_first
+  - manifest_everything
+  - timezone_consistent
+workstreams:
+  - id: M4.1
+    title: Recording pipeline
+    deliverables:
+      - apps/trade_server/app/recording/recorder_service.py
+      - apps/trade_server/app/recording/sinks.py
+      - libs/marketdata/raw_store.py
+      - libs/marketdata/manifest_store.py
+      - scripts/run_recorder_smoke.py
+    acceptance:
+      - mock_ticks_written_to_parquet
+      - manifest_records_created
+      - record_counts_match
+  - id: M4.2
+    title: Standard ETL and bar builder
+    deliverables:
+      - libs/marketdata/schemas.py
+      - libs/marketdata/standardize.py
+      - libs/marketdata/bars.py
+      - scripts/build_standard_data.py
+    acceptance:
+      - duplicate_ticks_removed
+      - session_filter_applied
+      - 1m_ohlcv_correct
+      - daily_bar_generated
+  - id: M4.3
+    title: Corporate actions and adjustment factors
+    deliverables:
+      - libs/marketdata/corporate_actions.py
+      - libs/marketdata/adjustments.py
+      - bootstrap_sample_actions
+    acceptance:
+      - sample_dividend_adjustment_ok
+      - sample_split_adjustment_ok
+      - factor_series_exported
+  - id: M4.4
+    title: Qlib provider export
+    deliverables:
+      - libs/marketdata/symbol_mapping.py
+      - libs/marketdata/qlib_export.py
+      - scripts/export_qlib_provider.py
+    acceptance:
+      - qlib_init_ok
+      - sample_symbol_1d_read_ok
+      - sample_symbol_1min_read_ok
+  - id: M4.5
+    title: Data quality and replay
+    deliverables:
+      - libs/marketdata/dq.py
+      - apps/trade_server/app/replay/tick_replay.py
+      - apps/trade_server/app/replay/bar_replay.py
+      - scripts/run_data_dq.py
+      - scripts/replay_sample.py
+    acceptance:
+      - dq_report_generated
+      - out_of_session_issue_detected
+      - replay_reconstructs_tick_sequence
+sql:
+  - infra/sql/postgres/002_market_data.sql
+contracts:
+  raw_tick_fields:
+    - instrument_key
+    - symbol
+    - exchange
+    - vt_symbol
+    - gateway_name
+    - exchange_ts
+    - received_ts
+    - last_price
+    - volume
+    - turnover
+    - bid_price_1
+    - ask_price_1
+    - bid_volume_1
+    - ask_volume_1
+    - limit_up
+    - limit_down
+    - raw_hash
+  standard_bar_fields:
+    - instrument_key
+    - symbol
+    - exchange
+    - vt_symbol
+    - bar_dt
+    - open
+    - high
+    - low
+    - close
+    - volume
+    - turnover
+    - trade_count
+    - vwap
+    - session_tag
+    - build_run_id
+  manifests:
+    - recording_runs
+    - raw_file_manifest
+    - standard_file_manifest
+    - corporate_actions
+    - adjustment_factors
+    - dq_reports
+cli:
+  - .\\.venv\\Scripts\\python.exe -m scripts.run_recorder_smoke
+  - .\\.venv\\Scripts\\python.exe -m scripts.build_standard_data --trade-date 2026-03-25
+  - .\\.venv\\Scripts\\python.exe -m scripts.export_qlib_provider --freq 1d
+  - .\\.venv\\Scripts\\python.exe -m scripts.export_qlib_provider --freq 1min
+  - .\\.venv\\Scripts\\python.exe -m scripts.run_data_dq --trade-date 2026-03-25
+  - .\\.venv\\Scripts\\python.exe -m scripts.replay_sample --input <sample>
+quality_gates:
+  - ruff_check_dot
+  - mypy_apps_gateways_libs_scripts
+  - pytest_q
+  - pyqlib_smoke_test
+  - no_flaky_tests
+definition_of_done:
+  - raw_recording_works
+  - standard_1m_and_1d_built
+  - adjustment_factors_built
+  - qlib_provider_exported
+  - qlib_smoke_read_passes
+  - dq_report_exists
+  - replay_tests_pass
+  - adr_and_runbook_added
+next_phase_after_m4: M5_qlib_baseline_workflow
+

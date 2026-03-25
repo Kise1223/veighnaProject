@@ -1,0 +1,53 @@
+{
+  "env": "local",
+  "project_root": ".",
+  "gateway": {
+    "gateway_name": "OPENCTPSEC",
+    "auto_connect": false,
+    "settings": {
+      "account_id": "SIM-ACC"
+    }
+  },
+  "health_server": {
+    "enabled": true,
+    "host": "127.0.0.1",
+    "port": 18080
+  },
+  "optional_apps": [
+    {
+      "name": "risk_manager",
+      "module": "vnpy_riskmanager",
+      "class_name": "RiskManagerApp",
+      "enabled": true,
+      "required": false
+    },
+    {
+      "name": "algo_trading",
+      "module": "vnpy_algotrading",
+      "class_name": "AlgoTradingApp",
+      "enabled": true,
+      "required": false
+    },
+    {
+      "name": "data_recorder",
+      "module": "vnpy_datarecorder",
+      "class_name": "DataRecorderApp",
+      "enabled": true,
+      "required": false
+    },
+    {
+      "name": "rpc_service",
+      "module": "vnpy_rpcservice",
+      "class_name": "RpcServiceApp",
+      "enabled": true,
+      "required": false
+    },
+    {
+      "name": "portfolio_manager",
+      "module": "vnpy_portfoliomanager",
+      "class_name": "PortfolioManagerApp",
+      "enabled": true,
+      "required": false
+    }
+  ]
+}

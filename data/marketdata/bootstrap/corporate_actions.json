@@ -1,0 +1,36 @@
+{
+  "source": "bootstrap_manual",
+  "source_version": "2026-03-26",
+  "corporate_actions": [
+    {
+      "action_id": "CA_EQ_SZ_000001_DIV_20260326",
+      "instrument_key": "EQ_SZ_000001",
+      "symbol": "000001",
+      "exchange": "SZSE",
+      "action_type": "cash_dividend",
+      "ex_date": "2026-03-26",
+      "effective_date": "2026-03-26",
+      "cash_per_share": 0.2,
+      "share_ratio": null,
+      "rights_price": null,
+      "source": "bootstrap_manual",
+      "source_hash": "DIVIDEND_SAMPLE_20260326",
+      "loaded_at": "2026-03-26T00:00:00+08:00"
+    },
+    {
+      "action_id": "CA_EQ_SH_600000_SPLIT_20260326",
+      "instrument_key": "EQ_SH_600000",
+      "symbol": "600000",
+      "exchange": "SSE",
+      "action_type": "stock_split",
+      "ex_date": "2026-03-26",
+      "effective_date": "2026-03-26",
+      "cash_per_share": null,
+      "share_ratio": 1.0,
+      "rights_price": null,
+      "source": "bootstrap_manual",
+      "source_hash": "SPLIT_SAMPLE_20260326",
+      "loaded_at": "2026-03-26T00:00:00+08:00"
+    }
+  ]
+}

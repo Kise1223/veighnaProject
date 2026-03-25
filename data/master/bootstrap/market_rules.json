@@ -1,0 +1,145 @@
+{
+  "market_rules": [
+    {
+      "rule_id": "SSE_MAIN_EQUITY_2025",
+      "exchange": "SSE",
+      "instrument_type": "EQUITY",
+      "board": "MAIN",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "trading_sessions": [
+        {"phase": "OPEN_CALL", "start": "09:15:00", "end": "09:25:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false},
+        {"phase": "CONTINUOUS_AM", "start": "09:30:00", "end": "11:30:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CONTINUOUS_PM", "start": "13:00:00", "end": "14:57:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CLOSE_CALL", "start": "14:57:00", "end": "15:00:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false}
+      ],
+      "cancel_restricted_windows": [
+        {"start": "09:20:00", "end": "09:25:00", "action": "CANCEL", "reason": "open_call_lock"},
+        {"start": "14:57:00", "end": "15:00:00", "action": "CANCEL", "reason": "close_call_lock"}
+      ],
+      "price_limit_ratio": "0.10",
+      "ipo_free_limit_days": 5,
+      "after_hours_supported": false,
+      "source": "sse_public_rulebook",
+      "source_version": "2026-03-26"
+    },
+    {
+      "rule_id": "SZSE_MAIN_EQUITY_2025",
+      "exchange": "SZSE",
+      "instrument_type": "EQUITY",
+      "board": "MAIN",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "trading_sessions": [
+        {"phase": "OPEN_CALL", "start": "09:15:00", "end": "09:25:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false},
+        {"phase": "CONTINUOUS_AM", "start": "09:30:00", "end": "11:30:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CONTINUOUS_PM", "start": "13:00:00", "end": "14:57:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CLOSE_CALL", "start": "14:57:00", "end": "15:00:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false}
+      ],
+      "cancel_restricted_windows": [
+        {"start": "09:20:00", "end": "09:25:00", "action": "CANCEL", "reason": "open_call_lock"},
+        {"start": "14:57:00", "end": "15:00:00", "action": "CANCEL", "reason": "close_call_lock"}
+      ],
+      "price_limit_ratio": "0.10",
+      "ipo_free_limit_days": 5,
+      "after_hours_supported": false,
+      "source": "szse_public_rulebook",
+      "source_version": "2026-03-26"
+    },
+    {
+      "rule_id": "SZSE_GEM_EQUITY_2025",
+      "exchange": "SZSE",
+      "instrument_type": "EQUITY",
+      "board": "GEM",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "trading_sessions": [
+        {"phase": "OPEN_CALL", "start": "09:15:00", "end": "09:25:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false},
+        {"phase": "CONTINUOUS_AM", "start": "09:30:00", "end": "11:30:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CONTINUOUS_PM", "start": "13:00:00", "end": "14:57:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CLOSE_CALL", "start": "14:57:00", "end": "15:00:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false},
+        {"phase": "AFTER_HOURS_FIXED", "start": "15:05:00", "end": "15:30:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false}
+      ],
+      "cancel_restricted_windows": [
+        {"start": "09:20:00", "end": "09:25:00", "action": "CANCEL", "reason": "open_call_lock"},
+        {"start": "14:57:00", "end": "15:00:00", "action": "CANCEL", "reason": "close_call_lock"}
+      ],
+      "price_limit_ratio": "0.20",
+      "ipo_free_limit_days": 5,
+      "after_hours_supported": true,
+      "source": "szse_public_rulebook",
+      "source_version": "2026-03-26"
+    },
+    {
+      "rule_id": "SSE_STAR_EQUITY_2025",
+      "exchange": "SSE",
+      "instrument_type": "EQUITY",
+      "board": "STAR",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "trading_sessions": [
+        {"phase": "OPEN_CALL", "start": "09:15:00", "end": "09:25:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false},
+        {"phase": "CONTINUOUS_AM", "start": "09:30:00", "end": "11:30:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CONTINUOUS_PM", "start": "13:00:00", "end": "14:57:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CLOSE_CALL", "start": "14:57:00", "end": "15:00:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false},
+        {"phase": "AFTER_HOURS_FIXED", "start": "15:05:00", "end": "15:30:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false}
+      ],
+      "cancel_restricted_windows": [
+        {"start": "09:20:00", "end": "09:25:00", "action": "CANCEL", "reason": "open_call_lock"},
+        {"start": "14:57:00", "end": "15:00:00", "action": "CANCEL", "reason": "close_call_lock"}
+      ],
+      "price_limit_ratio": "0.20",
+      "ipo_free_limit_days": 5,
+      "after_hours_supported": true,
+      "source": "sse_public_rulebook",
+      "source_version": "2026-03-26"
+    },
+    {
+      "rule_id": "SSE_ETF_2025",
+      "exchange": "SSE",
+      "instrument_type": "ETF",
+      "board": "ETF",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "trading_sessions": [
+        {"phase": "OPEN_CALL", "start": "09:15:00", "end": "09:25:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false},
+        {"phase": "CONTINUOUS_AM", "start": "09:30:00", "end": "11:30:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CONTINUOUS_PM", "start": "13:00:00", "end": "14:57:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CLOSE_CALL", "start": "14:57:00", "end": "15:00:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false}
+      ],
+      "cancel_restricted_windows": [
+        {"start": "09:20:00", "end": "09:25:00", "action": "CANCEL", "reason": "open_call_lock"},
+        {"start": "14:57:00", "end": "15:00:00", "action": "CANCEL", "reason": "close_call_lock"}
+      ],
+      "price_limit_ratio": "0.10",
+      "ipo_free_limit_days": 0,
+      "after_hours_supported": false,
+      "source": "sse_public_rulebook",
+      "source_version": "2026-03-26"
+    },
+    {
+      "rule_id": "SZSE_ETF_2025",
+      "exchange": "SZSE",
+      "instrument_type": "ETF",
+      "board": "ETF",
+      "effective_from": "2025-01-01",
+      "effective_to": null,
+      "trading_sessions": [
+        {"phase": "OPEN_CALL", "start": "09:15:00", "end": "09:25:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false},
+        {"phase": "CONTINUOUS_AM", "start": "09:30:00", "end": "11:30:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CONTINUOUS_PM", "start": "13:00:00", "end": "14:57:00", "order_accepting": true, "match_phase": true, "cancel_allowed": true},
+        {"phase": "CLOSE_CALL", "start": "14:57:00", "end": "15:00:00", "order_accepting": true, "match_phase": true, "cancel_allowed": false}
+      ],
+      "cancel_restricted_windows": [
+        {"start": "09:20:00", "end": "09:25:00", "action": "CANCEL", "reason": "open_call_lock"},
+        {"start": "14:57:00", "end": "15:00:00", "action": "CANCEL", "reason": "close_call_lock"}
+      ],
+      "price_limit_ratio": "0.10",
+      "ipo_free_limit_days": 0,
+      "after_hours_supported": false,
+      "source": "szse_public_rulebook",
+      "source_version": "2026-03-26"
+    }
+  ]
+}
+

@@ -1,0 +1,4 @@
+cost_profile_id,broker,instrument_type,exchange,effective_from,effective_to,commission_rate,commission_min,tax_sell_rate,handling_fee_rate,transfer_fee_rate,reg_fee_rate,source,source_version
+CN_EQ_DEFAULT,DEFAULT,EQUITY,,2025-01-01,,0.0003,5.00,0.0010,0.0000341,0.00001,0.00002,exchange_public_fee,2026-03-26
+CN_ETF_DEFAULT,DEFAULT,ETF,,2025-01-01,,0.0002,5.00,0,0.0000341,0.00000,0.00002,exchange_public_fee,2026-03-26
+

@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=80", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "veighna-quant-platform"
+version = "0.1.0"
+description = "A-share quant platform foundation using VeighNa, Qlib, and OpenCTP contracts."
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+license = {text = "MIT"}
+authors = [
+  {name = "whq"}
+]
+dependencies = [
+  "pandas>=2.2,<4.0",
+  "pyarrow>=17,<21",
+  "pydantic>=2.8,<3.0",
+  "typing-extensions>=4.12,<5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "mypy>=1.10,<2.0",
+  "pre-commit>=3.7,<4.0",
+  "pytest>=8.2,<9.0",
+  "ruff>=0.5,<0.6",
+]
+db = [
+  "psycopg[binary]>=3.2,<4.0",
+]
+gateway = [
+  "vnpy>=4.0,<5.0",
+]
+research = [
+  "pyqlib>=0.9,<1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apps*", "gateways*", "libs*", "scripts*"]
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra"
+testpaths = [
+  "tests",
+  "apps/trade_server/tests",
+  "libs/rules_engine/tests",
+  "gateways/vnpy_openctpsec/tests",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "A", "C4", "T20"]
+ignore = ["B008", "E501"]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+strict_equality = true
+packages = ["apps", "gateways", "libs", "scripts"]
+exclude = ["gateways/vnpy_openctpsec/tests"]
+
+[[tool.mypy.overrides]]
+module = [
+  "gateways.vnpy_openctpsec.compat",
+  "gateways.vnpy_openctpsec.mapper",
+  "gateways.vnpy_openctpsec.state",
+]
+ignore_errors = true
