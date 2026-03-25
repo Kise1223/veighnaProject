@@ -1,0 +1,30 @@
+dataset_name: baseline_dataset_v1
+feature_set_name: baseline_features_v1
+feature_set_version: v1
+freq: day
+instruments: all
+train_start: 2026-02-02
+train_end: 2026-03-25
+infer_trade_date: 2026-03-26
+min_train_rows: 40
+min_instruments: 2
+features:
+  - name: open_close_return
+    expression: ($close/$open)-1
+  - name: high_close_spread
+    expression: ($high/$close)-1
+  - name: close_low_spread
+    expression: ($close/$low)-1
+  - name: close_return_1d
+    expression: ($close/Ref($close, 1))-1
+  - name: close_return_5d
+    expression: ($close/Ref($close, 5))-1
+  - name: volume_change_1d
+    expression: ($volume/Ref($volume, 1))-1
+  - name: amount_change_1d
+    expression: ($amount/Ref($amount, 1))-1
+  - name: vwap_close_spread
+    expression: ($vwap/$close)-1
+label:
+  name: next_close_return
+  expression: (Ref($close, -1)/$close)-1

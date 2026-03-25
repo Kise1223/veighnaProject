@@ -21,3 +21,5 @@ data/standard/
 data/qlib_bin/
 data/dq_reports/
 data/manifests/
+data/research/
+data/bootstrap/research_sample/sample_manifest.json

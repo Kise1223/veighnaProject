@@ -1,0 +1,21 @@
+milestone: M5
+title: qlib baseline workflow
+acceptance:
+  - qlib.init works from the repository provider
+  - baseline dataset is buildable from repository configs
+  - one baseline model trains successfully
+  - model_run artifact is persisted with lineage
+  - daily inference writes prediction artifacts
+  - repeated training and inference are idempotent
+  - M0-M4 tests stay green
+tasks:
+  - id: M5-1
+    title: add research schemas and SQL DDL
+  - id: M5-2
+    title: add independent research runtime and configs
+  - id: M5-3
+    title: add deterministic research sample builder
+  - id: M5-4
+    title: add train, inference, consistency, and run listing CLIs
+  - id: M5-5
+    title: add tests and update README and runbooks

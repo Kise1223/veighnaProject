@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from gateways.vnpy_openctpsec.compat import Exchange, TickData
 from libs.common.time import ensure_cn_aware
@@ -49,10 +50,11 @@ def replay_ticks(path: Path, *, gateway_name: str = "REPLAY") -> list[TickData]:
             ask_volume_4=_float_or_zero(row.get("ask_volume_4")),
             ask_volume_5=_float_or_zero(row.get("ask_volume_5")),
         )
-        setattr(tick, "exchange_ts", ensure_cn_aware(_as_datetime(row["exchange_ts"])))
-        setattr(tick, "received_ts", ensure_cn_aware(_as_datetime(row["received_ts"])))
-        setattr(tick, "instrument_key", row["instrument_key"])
-        setattr(tick, "source_seq", row.get("source_seq"))
+        tick_any: Any = tick
+        tick_any.exchange_ts = ensure_cn_aware(_as_datetime(row["exchange_ts"]))
+        tick_any.received_ts = ensure_cn_aware(_as_datetime(row["received_ts"]))
+        tick_any.instrument_key = row["instrument_key"]
+        tick_any.source_seq = row.get("source_seq")
         events.append(tick)
     return events
 

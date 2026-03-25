@@ -1,0 +1,6 @@
+provider_uri: data/qlib_bin
+region: cn
+experiment_name: baseline_linear_v1
+artifacts_root: data/research
+recorder_uri: data/research/mlruns
+qlib_export_manifest_path: data/qlib_bin/export_manifest_day.json

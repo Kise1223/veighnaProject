@@ -1,17 +1,18 @@
 # VeighNa Quant Platform
 
-This repository implements the first five milestones of an A-share quant platform:
+This repository implements the first six milestones of an A-share quant platform:
 
 - `M0`: repository bootstrap and local developer tooling
 - `M1`: master data schemas, A-share rules engine, and bootstrap loader
 - `M2`: VeighNa-compatible OpenCTP gateway skeleton with a mock-first adapter contract
 - `M3`: trade server bootstrap around `MainEngine`, `OmsEngine`, and the OpenCTP gateway
 - `M4`: parquet-first market data recording, standard ETL, adjustment factors, and qlib provider export
+- `M5`: standalone qlib baseline dataset, baseline model training, experiment artifacts, and daily inference
 
 ## Scope Freeze
 
-- Supported in `M0-M4`: SSE/SZSE cash equities and ETFs
-- Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, model training, signal service, execution planner, large-scale historical backfill
+- Supported in `M0-M5`: SSE/SZSE cash equities and ETFs
+- Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, target weights, execution planner, signal service, and large-scale historical backfill
 
 ## Canonical Interpreter
 
@@ -46,6 +47,22 @@ M4 market data tasks are exposed through standalone scripts:
 .\.venv\Scripts\python.exe -m scripts.export_qlib_provider --freq 1min
 ```
 
+Install research extras before running M5:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[research]"
+```
+
+M5 research tasks are exposed through standalone scripts:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.build_research_sample
+.\.venv\Scripts\python.exe -m scripts.check_qlib_consistency
+.\.venv\Scripts\python.exe -m scripts.train_qlib_baseline
+.\.venv\Scripts\python.exe -m scripts.run_daily_inference --trade-date 2026-03-26
+.\.venv\Scripts\python.exe -m scripts.list_research_runs
+```
+
 ## Repository Layout
 
 ```text
@@ -53,11 +70,13 @@ apps/trade_server/      trade process bootstrap, health endpoint, and runtime co
 gateways/             VeighNa-compatible gateway packages
 libs/common/          shared logging and time helpers
 libs/marketdata/      M4 recorder, ETL, DQ, adjustment, and qlib export helpers
+libs/research/        M5 research artifact schemas, lineage, and file-first storage
 libs/schemas/         pydantic schemas and canonical identifiers
 libs/rules_engine/    A-share rule snapshots, phases, validation, and costs
 infra/sql/postgres/   bootstrap SQL and schema definitions
 data/master/bootstrap/ versioned seed master data and provenance metadata
 data/marketdata/bootstrap/ sample corporate actions used by the M4 closed loop
+data/bootstrap/research_sample/ deterministic M5 sample spec for smoke training
 docs/adr/             architecture decisions and frozen contracts
 docs/runbooks/        developer and bootstrap runbooks
 scripts/              local developer entrypoints and ETL/loader CLIs
@@ -73,5 +92,24 @@ scripts/              local developer entrypoints and ETL/loader CLIs
 - The trade server keeps `MainEngine` and `OmsEngine` as the canonical execution-side runtime and only exposes adapter state through health snapshots.
 - Raw market data is append-only parquet with manifests, while standardized layers remain rebuildable from raw plus master data plus corporate actions.
 - Qlib is an optional research consumer of exported provider files and is not imported by the trade runtime startup path.
+- Research artifacts remain file-first in `data/research/`, and every prediction can be traced back to one `model_run`, one qlib export run, and one standard build run.
 
-See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), and [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md) for the frozen implementation contracts.
+## M5 Workflow
+
+If the repository only contains the tiny M4 smoke sample, build the deterministic research sample first:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.build_research_sample
+```
+
+Then verify provider consistency, train the baseline, and run daily inference:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.check_qlib_consistency
+.\.venv\Scripts\python.exe -m scripts.train_qlib_baseline
+.\.venv\Scripts\python.exe -m scripts.run_daily_inference --trade-date 2026-03-26
+```
+
+Training is idempotent by config and lineage hash. Re-running the same baseline uses the existing `model_run`. Daily inference is idempotent by `trade_date + run_id`; it reuses the existing prediction artifact instead of overwriting it.
+
+See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), and [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md) for the frozen implementation contracts.

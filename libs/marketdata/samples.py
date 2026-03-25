@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from gateways.vnpy_openctpsec.compat import Exchange, TickData
 from libs.common.time import CN_TZ
@@ -124,6 +125,7 @@ def _tick(
         limit_up=float(last_price * Decimal("1.10")),
         limit_down=float(last_price * Decimal("0.90")),
     )
-    setattr(tick, "exchange_ts", exchange_ts)
-    setattr(tick, "received_ts", received_ts)
+    tick_any: Any = tick
+    tick_any.exchange_ts = exchange_ts
+    tick_any.received_ts = received_ts
     return tick

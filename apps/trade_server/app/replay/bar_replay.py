@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from gateways.vnpy_openctpsec.compat import BarData, Exchange, Interval
 from libs.common.time import ensure_cn_aware
@@ -29,7 +30,8 @@ def replay_bars(path: Path, *, gateway_name: str = "REPLAY") -> list[BarData]:
             low_price=float(row["low"]),
             close_price=float(row["close"]),
         )
-        setattr(bar, "instrument_key", row["instrument_key"])
+        bar_any: Any = bar
+        bar_any.instrument_key = row["instrument_key"]
         events.append(bar)
     return events
 

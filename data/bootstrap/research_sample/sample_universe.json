@@ -1,0 +1,10 @@
+{
+  "sample_name": "research_sample_v1",
+  "trade_date_start": "2026-02-02",
+  "trade_date_end": "2026-03-26",
+  "instrument_keys": [
+    "EQ_SH_600000",
+    "EQ_SZ_000001",
+    "ETF_SH_510300"
+  ]
+}
