@@ -57,6 +57,32 @@ class ManifestStore:
             return records
         return [record for record in records if record.layer == layer]
 
+    def delete_standard_file_manifests(
+        self,
+        *,
+        layer: str,
+        trade_date: object | None = None,
+        symbol: str | None = None,
+        exchange: str | None = None,
+        instrument_key: str | None = None,
+    ) -> None:
+        target_dir = self.root / "standard_file_manifest"
+        if not target_dir.exists():
+            return
+        for path in sorted(target_dir.glob("*.json")):
+            record = StandardFileManifest.model_validate_json(path.read_text(encoding="utf-8"))
+            if record.layer != layer:
+                continue
+            if trade_date is not None and record.trade_date != trade_date:
+                continue
+            if symbol is not None and record.symbol != symbol:
+                continue
+            if exchange is not None and record.exchange != exchange:
+                continue
+            if instrument_key is not None and record.instrument_key != instrument_key:
+                continue
+            path.unlink()
+
     def list_dq_reports(self) -> list[DQReport]:
         return self._read_all("dq_reports", DQReport)
 
@@ -81,4 +107,3 @@ class ManifestStore:
         for path in sorted(target_dir.glob("*.json")):
             results.append(model_type.model_validate_json(path.read_text(encoding="utf-8")))
         return results
-

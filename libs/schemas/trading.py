@@ -54,6 +54,7 @@ class AccountSnapshot(BaseModel):
 class MarketSnapshot(BaseModel):
     instrument_key: str
     last_price: Decimal
+    previous_close: Decimal | None = None
     upper_limit: Decimal | None = None
     lower_limit: Decimal | None = None
     is_paused: bool = False

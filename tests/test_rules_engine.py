@@ -93,6 +93,7 @@ def test_validate_order_enforces_lot_price_and_sellable_rules() -> None:
     market = MarketSnapshot(
         instrument_key=stock.instrument_key,
         last_price=Decimal("10"),
+        previous_close=Decimal("10"),
         upper_limit=Decimal("11"),
         lower_limit=Decimal("9"),
         is_paused=False,

@@ -55,14 +55,18 @@ def validate_order(
     if order.side == OrderSide.BUY and required_cash > account_snapshot.available_cash:
         reasons.append("insufficient_cash")
 
-    price_limit = rules.get_price_limit(
-        order.order_ts.date(),
-        instrument=instrument,
-        last_close=market_snapshot.last_price,
-        open_price=market_snapshot.last_price,
-        status_flags=set(),
-    )
-    _validate_price_band(order.price, price_limit, reasons)
+    try:
+        price_limit = rules.get_price_limit(
+            order.order_ts.date(),
+            instrument=instrument,
+            last_close=market_snapshot.previous_close,
+            open_price=market_snapshot.last_price,
+            status_flags=set(),
+        )
+    except ValueError:
+        reasons.append("previous_close_required_for_price_limit_validation")
+    else:
+        _validate_price_band(order.price, price_limit, reasons)
 
     return ValidationResult(
         accepted=not reasons,

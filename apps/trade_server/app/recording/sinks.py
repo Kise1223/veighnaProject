@@ -6,8 +6,8 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-from apps.trade_server.app.recording.manifests import make_raw_file_manifest
 from libs.marketdata.manifest_store import ManifestStore
+from libs.marketdata.manifests import make_raw_file_manifest
 from libs.marketdata.raw_store import write_partition_frame
 from libs.marketdata.schemas import RawFileManifest, RawTickRecord
 

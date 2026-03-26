@@ -10,9 +10,9 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-from apps.trade_server.app.recording.manifests import make_standard_file_manifest
 from libs.common.time import CN_TZ
 from libs.marketdata.manifest_store import ManifestStore
+from libs.marketdata.manifests import make_standard_file_manifest
 from libs.marketdata.qlib_export import export_qlib_provider
 from libs.marketdata.raw_store import write_partition_frame
 from libs.marketdata.symbol_mapping import InstrumentCatalog

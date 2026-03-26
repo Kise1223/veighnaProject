@@ -9,9 +9,9 @@ from typing import Any
 
 import numpy as np
 
-from apps.trade_server.app.recording.manifests import make_standard_file_manifest
 from libs.common.time import ensure_cn_aware
 from libs.marketdata.manifest_store import ManifestStore
+from libs.marketdata.manifests import make_standard_file_manifest
 from libs.marketdata.raw_store import read_partitioned_frame, require_parquet_support
 from libs.marketdata.symbol_mapping import InstrumentCatalog
 
@@ -93,13 +93,14 @@ def qlib_smoke_read(*, provider_root: Path, qlib_symbol: str, freq: str) -> obje
     from qlib.data import D  # type: ignore[import-untyped]
 
     qlib_freq = _normalize_freq(freq)
+    start_time, end_time = _smoke_window(provider_root, qlib_freq)
     qlib.init(provider_uri=str(provider_root), region="cn", expression_cache=None, dataset_cache=None)
     fields = ["$open", "$close"]
     data = D.features(
         instruments=[qlib_symbol],
         fields=fields,
-        start_time="2026-03-25",
-        end_time="2026-03-26 15:00:00",
+        start_time=start_time,
+        end_time=end_time,
         freq=qlib_freq,
     )
     return data
@@ -188,3 +189,13 @@ def _format_calendar_value(value: object, freq: str) -> str:
     if timestamp.tzinfo is not None:
         timestamp = timestamp.tz_convert("Asia/Shanghai").tz_localize(None)
     return str(timestamp.strftime("%Y-%m-%d %H:%M:%S"))
+
+
+def _smoke_window(provider_root: Path, qlib_freq: str) -> tuple[str, str]:
+    calendar_path = provider_root / "calendars" / f"{qlib_freq}.txt"
+    if not calendar_path.exists():
+        raise FileNotFoundError(f"qlib calendar not found: {calendar_path}")
+    values = [line.strip() for line in calendar_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not values:
+        raise ValueError(f"qlib calendar is empty: {calendar_path}")
+    return values[0], values[-1]

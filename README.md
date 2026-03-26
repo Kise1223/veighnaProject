@@ -110,6 +110,8 @@ Then verify provider consistency, train the baseline, and run daily inference:
 .\.venv\Scripts\python.exe -m scripts.run_daily_inference --trade-date 2026-03-26
 ```
 
-Training is idempotent by config and lineage hash. Re-running the same baseline uses the existing `model_run`. Daily inference is idempotent by `trade_date + run_id`; it reuses the existing prediction artifact instead of overwriting it.
+Training is idempotent by config and lineage hash. Re-running the same baseline uses the existing `model_run` only when that run is already `success`. Failed runs do not block retraining; the next train reuses the deterministic `run_id` but rebuilds the run directory, and `--force` can be used to retrain an already successful run on purpose. Daily inference is idempotent by `trade_date + run_id`; it reuses the existing prediction artifact instead of overwriting it.
+
+`scripts.build_standard_data --rebuild` means partition rebuild, not append. The target `trade_date/exchange/symbol` partition is cleared before rewriting, matching manifests are replaced, and adjustment factors are rebuilt from the deduplicated standard layer. Raw DQ time-order checks follow original ingest order; if `ingest_seq` exists it is treated as the canonical write order, otherwise parquet row order is used.
 
 See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), and [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md) for the frozen implementation contracts.

@@ -6,15 +6,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from apps.trade_server.app.recording.manifests import (
-    finish_recording_run,
-    make_recording_run,
-    make_run_id,
-)
 from apps.trade_server.app.recording.sinks import ParquetTickSink
 from libs.common.logging import configure_logging
 from libs.common.time import ensure_cn_aware
 from libs.marketdata.manifest_store import ManifestStore
+from libs.marketdata.manifests import (
+    finish_recording_run,
+    make_recording_run,
+    make_run_id,
+)
 from libs.marketdata.raw_store import stable_hash
 from libs.marketdata.schemas import RawTickRecord, RecordingRun
 from libs.marketdata.symbol_mapping import InstrumentCatalog
@@ -50,6 +50,7 @@ class RecorderService:
         self.mode = mode
         self.run: RecordingRun | None = None
         self._started = False
+        self._ingest_seq = 0
 
     def start(self, run_id: str | None = None) -> RecordingRun:
         if self._started and self.run is not None:
@@ -61,6 +62,7 @@ class RecorderService:
         if EVENT_TICK != "tick":
             self._register_handler("tick")
         self._started = True
+        self._ingest_seq = 0
         return self.run
 
     def stop(self, *, status: str = "completed", notes: str | None = None) -> None:
@@ -70,6 +72,7 @@ class RecorderService:
         self.run = finish_recording_run(self.run, status=status, notes=notes)
         self.manifest_store.upsert_recording_run(self.run)
         self._started = False
+        self._ingest_seq = 0
 
     def flush(self) -> None:
         if self.run is None:
@@ -107,6 +110,7 @@ class RecorderService:
         limit_up = _optional_float(getattr(tick, "limit_up", None))
         limit_down = _optional_float(getattr(tick, "limit_down", None))
         source_seq = _optional_str(getattr(tick, "source_seq", None))
+        self._ingest_seq += 1
         vt_symbol = resolved.mapping.vt_symbol
         payload = {
             "instrument_key": instrument_key,
@@ -123,6 +127,7 @@ class RecorderService:
             "limit_up": limit_up,
             "limit_down": limit_down,
             "source_seq": source_seq,
+            "ingest_seq": self._ingest_seq,
         }
         for side in ("bid", "ask"):
             for level in range(1, 6):
@@ -167,6 +172,7 @@ class RecorderService:
             limit_up=limit_up,
             limit_down=limit_down,
             source_seq=source_seq,
+            ingest_seq=self._ingest_seq,
             raw_hash=stable_hash(payload),
             recorded_at=recorded_at,
         )

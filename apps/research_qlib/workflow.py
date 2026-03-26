@@ -37,6 +37,7 @@ def train_baseline_workflow(
     base_config_path: Path = DEFAULT_BASE_CONFIG,
     dataset_config_path: Path = DEFAULT_DATASET_CONFIG,
     model_config_path: Path = DEFAULT_MODEL_CONFIG,
+    force: bool = False,
 ) -> dict[str, object]:
     runtime_config = load_runtime_config(project_root / base_config_path)
     dataset_config = load_dataset_config(project_root / dataset_config_path)
@@ -62,12 +63,15 @@ def train_baseline_workflow(
     run_id = f"model_{config_hash[:12]}"
     if store.has_run(run_id):
         existing = store.load_run(run_id)
-        return {
-            "run_id": existing.run_id,
-            "status": existing.status.value,
-            "artifact_path": existing.artifact_path,
-            "reused": True,
-        }
+        if existing.status == ResearchRunStatus.SUCCESS and not force:
+            return {
+                "run_id": existing.run_id,
+                "status": existing.status.value,
+                "artifact_path": existing.artifact_path,
+                "reused": True,
+            }
+        if existing.status != ResearchRunStatus.SUCCESS or force:
+            store.clear_run(run_id)
 
     created_at = ensure_cn_aware(datetime.now())
     run = ModelRunRecord(

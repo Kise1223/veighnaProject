@@ -50,6 +50,7 @@ class RawTickRecord(BaseModel):
     limit_up: float | None = None
     limit_down: float | None = None
     source_seq: str | None = None
+    ingest_seq: int | None = None
     raw_hash: str
     recorded_at: datetime
 

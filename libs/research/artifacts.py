@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -41,6 +42,11 @@ class ResearchArtifactStore:
         target_path = self.run_record_path(run.run_id)
         target_path.write_text(run.model_dump_json(indent=2), encoding="utf-8")
         return target_path
+
+    def clear_run(self, run_id: str) -> None:
+        target_dir = self.run_dir(run_id)
+        if target_dir.exists():
+            shutil.rmtree(target_dir)
 
     def load_run(self, run_id: str) -> ModelRunRecord:
         return ModelRunRecord.model_validate_json(

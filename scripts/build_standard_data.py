@@ -9,12 +9,14 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from apps.trade_server.app.recording.manifests import make_run_id, make_standard_file_manifest
 from libs.marketdata.adjustments import build_adjustment_factors
 from libs.marketdata.bars import build_1m_bars, build_daily_bars_from_1m
 from libs.marketdata.corporate_actions import load_corporate_actions
 from libs.marketdata.manifest_store import ManifestStore
+from libs.marketdata.manifests import make_run_id, make_standard_file_manifest
 from libs.marketdata.raw_store import (
+    clear_partition_dir,
+    clear_symbol_partitions,
     list_partition_files,
     read_partitioned_frame,
     write_partition_frame,
@@ -129,6 +131,18 @@ def main() -> int:
                 if factor_frame.empty:
                     continue
                 latest_trade_date = factor_frame["trade_date"].max()
+                if args.rebuild:
+                    clear_symbol_partitions(
+                        ROOT / "data" / "standard" / "adjustment_factors",
+                        exchange=mapping.exchange.value,
+                        symbol=mapping.symbol,
+                    )
+                    manifest_store.delete_standard_file_manifests(
+                        layer="adjustment_factors",
+                        symbol=mapping.symbol,
+                        exchange=mapping.exchange.value,
+                        instrument_key=instrument_key,
+                    )
                 file_path = write_partition_frame(
                     factor_frame.to_dict(orient="records"),
                     base_dir=ROOT / "data" / "standard" / "adjustment_factors",
@@ -188,6 +202,15 @@ def _write_standard_partition(
     base_dir = ROOT / "data" / "standard" / layer
     if not rebuild and list_partition_files(base_dir, trade_date=trade_date, symbol=symbol, exchange=exchange):
         return
+    if rebuild:
+        clear_partition_dir(base_dir, trade_date, exchange, symbol)
+        manifest_store.delete_standard_file_manifests(
+            layer=layer,
+            trade_date=trade_date,
+            symbol=symbol,
+            exchange=exchange,
+            instrument_key=instrument_key,
+        )
     file_path = write_partition_frame(
         frame.to_dict(orient="records"),
         base_dir=base_dir,

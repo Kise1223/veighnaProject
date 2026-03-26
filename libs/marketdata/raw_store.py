@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
 from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
@@ -40,6 +41,21 @@ def resolve_partition_dir(base_dir: Path, trade_date: date, exchange: str, symbo
         / f"exchange={exchange}"
         / f"symbol={symbol}"
     )
+
+
+def clear_partition_dir(base_dir: Path, trade_date: date, exchange: str, symbol: str) -> None:
+    target_dir = resolve_partition_dir(base_dir, trade_date, exchange, symbol)
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+
+
+def clear_symbol_partitions(base_dir: Path, *, exchange: str, symbol: str) -> None:
+    if not base_dir.exists():
+        return
+    pattern = f"trade_date=*/exchange={exchange}/symbol={symbol}"
+    for target_dir in sorted(base_dir.glob(pattern)):
+        if target_dir.is_dir():
+            shutil.rmtree(target_dir)
 
 
 def relative_path(root: Path, path: Path) -> str:

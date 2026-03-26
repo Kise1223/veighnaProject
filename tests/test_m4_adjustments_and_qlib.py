@@ -195,3 +195,68 @@ def test_qlib_export_smoke_is_readable_for_1d_and_1min(tmp_path: Path, monkeypat
     assert not day_data.empty
     assert not min_data.empty
 
+
+def test_qlib_smoke_read_uses_provider_calendar_window(tmp_path: Path, monkeypatch) -> None:
+    pytest = __import__("pytest")
+    pytest.importorskip("qlib")
+    monkeypatch.setenv("MPLCONFIGDIR", str(tmp_path / ".mpl"))
+    catalog = InstrumentCatalog.from_bootstrap_dir(BOOTSTRAP_DIR)
+    manifest_store = ManifestStore(tmp_path / "data" / "manifests")
+    bars_1d = [
+        {
+            "instrument_key": "EQ_SH_600000",
+            "symbol": "600000",
+            "exchange": "SSE",
+            "vt_symbol": "600000.SSE",
+            "trade_date": "2026-04-07",
+            "bar_dt": "2026-04-07T15:00:00+08:00",
+            "open": 10.0,
+            "high": 10.2,
+            "low": 9.9,
+            "close": 10.1,
+            "volume": 100.0,
+            "turnover": 1005.0,
+            "trade_count": 1,
+            "vwap": 10.05,
+            "build_run_id": "build_test_window",
+        },
+        {
+            "instrument_key": "EQ_SH_600000",
+            "symbol": "600000",
+            "exchange": "SSE",
+            "vt_symbol": "600000.SSE",
+            "trade_date": "2026-04-08",
+            "bar_dt": "2026-04-08T15:00:00+08:00",
+            "open": 10.1,
+            "high": 10.3,
+            "low": 10.0,
+            "close": 10.2,
+            "volume": 120.0,
+            "turnover": 1220.0,
+            "trade_count": 1,
+            "vwap": 10.1667,
+            "build_run_id": "build_test_window",
+        },
+    ]
+    write_partition_frame(
+        bars_1d,
+        base_dir=tmp_path / "data" / "standard" / "bars_1d",
+        trade_date=__import__("datetime").date(2026, 4, 7),
+        exchange="SSE",
+        symbol="600000",
+        file_stem="bars_1d_window",
+    )
+    export_qlib_provider(
+        project_root=tmp_path,
+        provider_root=tmp_path / "data" / "qlib_bin",
+        catalog=catalog,
+        manifest_store=manifest_store,
+        freq="1d",
+        build_run_id="build_test_window",
+    )
+    day_data = qlib_smoke_read(
+        provider_root=tmp_path / "data" / "qlib_bin",
+        qlib_symbol="SH600000",
+        freq="1d",
+    )
+    assert list(day_data.index.get_level_values("datetime").strftime("%Y-%m-%d")) == ["2026-04-07", "2026-04-08"]

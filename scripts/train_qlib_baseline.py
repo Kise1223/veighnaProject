@@ -17,6 +17,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-config", default="configs/qlib/base.yaml")
     parser.add_argument("--dataset-config", default="configs/qlib/dataset_baseline.yaml")
     parser.add_argument("--model-config", default="configs/qlib/model_baseline.yaml")
+    parser.add_argument("--force", action="store_true")
     return parser.parse_args()
 
 
@@ -27,6 +28,7 @@ def main() -> int:
         base_config_path=Path(args.base_config),
         dataset_config_path=Path(args.dataset_config),
         model_config_path=Path(args.model_config),
+        force=args.force,
     )
     sys.stdout.write(json.dumps(result, ensure_ascii=False, indent=2) + "\n")
     return 0

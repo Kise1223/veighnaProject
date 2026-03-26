@@ -25,3 +25,11 @@
 - `M5` uses a deterministic linear regression baseline with minimal price-volume expressions.
 - It does not depend on `Alpha158` or `LightGBM`.
 - The model choice is driven by repeatable local training and low dependency friction, not by headline metrics.
+
+## M5.1 Hardening
+
+- Training run reuse is now status-aware: only `success` runs are auto-reused by deterministic `run_id`.
+- Failed runs do not poison the config hash forever. The same `run_id` can be retrained, and `--force` explicitly retrains an already successful run.
+- M4 rebuild semantics are frozen as partition replacement. `scripts.build_standard_data --rebuild` clears the target partition and replaces matching manifests before writing new parquet.
+- Raw DQ ordering is frozen to ingest order. If raw data carries `ingest_seq`, that sequence is authoritative; otherwise the persisted parquet row order is used.
+- Price-band validation is frozen to `previous_close`, not intraday `last_price`, and IPO free-limit windows are counted in trading days rather than natural days.

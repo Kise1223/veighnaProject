@@ -7,8 +7,8 @@ import json
 import sys
 from pathlib import Path
 
-from apps.trade_server.app.recording.manifests import make_run_id
 from libs.marketdata.manifest_store import ManifestStore
+from libs.marketdata.manifests import make_run_id
 from libs.marketdata.qlib_export import export_qlib_provider, qlib_smoke_read
 from libs.marketdata.symbol_mapping import InstrumentCatalog
 

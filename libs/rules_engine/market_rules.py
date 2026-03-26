@@ -158,7 +158,7 @@ class RulesRepository:
         self,
         trade_date: date,
         instrument: Instrument,
-        last_close: Decimal,
+        last_close: Decimal | None,
         open_price: Decimal | None,
         status_flags: set[str] | None = None,
     ) -> PriceLimit:
@@ -166,17 +166,36 @@ class RulesRepository:
         rule = self.get_rule(trade_date, instrument)
         if status_flags.intersection(STATUS_FLAGS_NO_LIMIT):
             return PriceLimit(upper_limit=None, lower_limit=None)
-        free_limit_deadline = instrument.list_date + timedelta(days=rule.ipo_free_limit_days)
-        if instrument.list_date <= trade_date < free_limit_deadline:
+        if self._is_ipo_free_limit_day(trade_date, instrument, rule.ipo_free_limit_days):
             return PriceLimit(upper_limit=None, lower_limit=None)
         limit_ratio = (
             instrument.limit_pct if instrument.limit_pct is not None else rule.price_limit_ratio
         )
         if limit_ratio is None:
             return PriceLimit(upper_limit=None, lower_limit=None)
+        if last_close is None:
+            raise ValueError("previous_close is required for price-limit validation")
         upper = _round_to_tick(last_close * (Decimal("1") + limit_ratio), instrument.pricetick)
         lower = _round_to_tick(last_close * (Decimal("1") - limit_ratio), instrument.pricetick)
         return PriceLimit(upper_limit=upper, lower_limit=lower)
+
+    def _is_ipo_free_limit_day(
+        self,
+        trade_date: date,
+        instrument: Instrument,
+        free_limit_days: int,
+    ) -> bool:
+        if free_limit_days <= 0 or trade_date < instrument.list_date:
+            return False
+        counted_trade_days = 0
+        current = instrument.list_date
+        while current <= trade_date:
+            if is_trade_day(current, instrument.exchange, self._calendars):
+                counted_trade_days += 1
+                if current == trade_date:
+                    return counted_trade_days <= free_limit_days
+            current += timedelta(days=1)
+        return False
 
 
 def _round_to_tick(value: Decimal, tick: Decimal) -> Decimal:
@@ -236,7 +255,7 @@ def get_price_limit(
     repo: RulesRepository,
     trade_date: date,
     instrument: Instrument,
-    last_close: Decimal,
+    last_close: Decimal | None,
     open_price: Decimal | None,
     status_flags: set[str] | None = None,
 ) -> PriceLimit:

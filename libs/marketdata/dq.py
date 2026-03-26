@@ -6,9 +6,9 @@ import json
 from datetime import date, datetime
 from pathlib import Path
 
-from apps.trade_server.app.recording.manifests import finalize_dq_report, make_run_id
 from libs.common.time import ensure_cn_aware
 from libs.marketdata.manifest_store import ManifestStore
+from libs.marketdata.manifests import finalize_dq_report, make_run_id
 from libs.marketdata.schemas import DQIssue, DQReport
 from libs.marketdata.symbol_mapping import InstrumentCatalog
 from libs.rules_engine.market_rules import RulesRepository
@@ -29,7 +29,7 @@ def evaluate_raw_tick_dq(raw_frame, *, catalog: InstrumentCatalog, rules_repo: R
     for row in duplicates.to_dict(orient="records"):
         issues.append(_issue("duplicate_tick", row, "duplicate raw_hash detected"))
 
-    ordered = raw_frame.sort_values(["symbol", "exchange", "exchange_ts", "received_ts"]).reset_index(drop=True)
+    ordered = _ordered_for_ingest(raw_frame)
     previous_ts: dict[tuple[str, str], datetime] = {}
     for row in ordered.to_dict(orient="records"):
         key = (row["symbol"], row["exchange"])
@@ -52,6 +52,12 @@ def evaluate_raw_tick_dq(raw_frame, *, catalog: InstrumentCatalog, rules_repo: R
         if phase.value == "CLOSED":
             issues.append(_issue("out_of_session", row, "tick recorded outside tradable sessions"))
     return issues
+
+
+def _ordered_for_ingest(raw_frame):  # type: ignore[no-untyped-def]
+    if "ingest_seq" in raw_frame.columns and not raw_frame["ingest_seq"].isna().all():
+        return raw_frame.sort_values(["symbol", "exchange", "ingest_seq"]).reset_index(drop=True)
+    return raw_frame.reset_index(drop=True)
 
 
 def write_dq_report(
