@@ -1,0 +1,26 @@
+milestone: M7
+title: paper execution sandbox and local ledger
+status: accepted
+scope:
+  include:
+    - paper_execution_run
+    - paper_orders
+    - paper_trades
+    - paper_account_snapshot
+    - paper_position_snapshot
+    - paper_reconcile_report
+    - deterministic_fill_model
+    - local_ledger
+    - sql_ddl_freeze
+  exclude:
+    - gateway_send_order
+    - live_broker_routing
+    - signal_service
+    - multi_account_orchestration
+    - optimizer
+acceptance:
+  - ruff_check
+  - mypy
+  - pytest
+  - run_paper_execution_smoke
+  - reconcile_paper_run_smoke

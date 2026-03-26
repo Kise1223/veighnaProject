@@ -15,7 +15,7 @@
 ## Project Rules
 
 - For research-related tasks, install first: `.\.venv\Scripts\python.exe -m pip install -e ".[research]"`.
-- Current status: `M0-M6` is complete; `M6` stops at dry-run order intents preview.
+- Current status: `M0-M7` is complete; `M7` stops at paper execution and local ledger.
 - Do not enter live order placement or call `send_order` unless the user explicitly asks for it.
 - Keep `research` and trade runtime decoupled.
 - `pyqlib` must not enter the trade runtime startup path.

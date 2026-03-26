@@ -18,4 +18,5 @@ def prepare_research_workspace(tmp_path: Path) -> Path:
     )
     shutil.copytree(ROOT / "configs" / "qlib", tmp_path / "configs" / "qlib")
     shutil.copytree(ROOT / "configs" / "planning", tmp_path / "configs" / "planning")
+    shutil.copytree(ROOT / "configs" / "execution", tmp_path / "configs" / "execution")
     return tmp_path

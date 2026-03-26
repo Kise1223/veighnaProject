@@ -1,6 +1,6 @@
 # VeighNa Quant Platform
 
-This repository implements the first seven milestones of an A-share quant platform:
+This repository implements the first eight milestones of an A-share quant platform:
 
 - `M0`: repository bootstrap and local developer tooling
 - `M1`: master data schemas, A-share rules engine, and bootstrap loader
@@ -9,10 +9,11 @@ This repository implements the first seven milestones of an A-share quant platfo
 - `M4`: parquet-first market data recording, standard ETL, adjustment factors, and qlib provider export
 - `M5`: standalone qlib baseline dataset, baseline model training, experiment artifacts, and daily inference
 - `M6`: file-first dry-run bridge from prediction to approved target weights, execution tasks, and order-request previews
+- `M7`: paper-only execution sandbox, deterministic fills, local ledger, and end-of-run reconcile reports
 
 ## Scope Freeze
 
-- Supported in `M0-M6`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews
+- Supported in `M0-M7`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, plus the `M7` paper execution sandbox and local ledger
 - Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, live order placement, real order routing via `send_order`, long-running signal service processes, multi-account scheduling, complex execution algorithms, optimizers, and large-scale historical backfill
 
 ## Canonical Interpreter
@@ -72,6 +73,8 @@ gateways/             VeighNa-compatible gateway packages
 libs/common/          shared logging and time helpers
 libs/marketdata/      M4 recorder, ETL, DQ, adjustment, and qlib export helpers
 libs/research/        M5 research artifact schemas, lineage, and file-first storage
+libs/planning/        M6 target-weight, rebalance, and dry-run bridge helpers
+libs/execution/       M7 paper execution, fill model, local ledger, and reconcile helpers
 libs/schemas/         pydantic schemas and canonical identifiers
 libs/rules_engine/    A-share rule snapshots, phases, validation, and costs
 infra/sql/postgres/   bootstrap SQL and schema definitions
@@ -94,6 +97,7 @@ scripts/              local developer entrypoints and ETL/loader CLIs
 - Raw market data is append-only parquet with manifests, while standardized layers remain rebuildable from raw plus master data plus corporate actions.
 - Qlib is an optional research consumer of exported provider files and is not imported by the trade runtime startup path.
 - Research artifacts remain file-first in `data/research/`, and every prediction can be traced back to one `model_run`, one qlib export run, and one standard build run.
+- `M7` paper execution remains file-first in `data/trading/` and never calls real `send_order`.
 
 ## M5 Workflow
 
@@ -115,7 +119,7 @@ Training is idempotent by config and lineage hash. Re-running the same baseline 
 
 `scripts.build_standard_data --rebuild` means partition rebuild, not append. The target `trade_date/exchange/symbol` partition is cleared before rewriting, matching manifests are replaced, and adjustment factors are rebuilt from the deduplicated standard layer. Raw DQ time-order checks follow original ingest order; if `ingest_seq` exists it is treated as the canonical write order, otherwise parquet row order is used.
 
-See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), and [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md) for the frozen implementation contracts.
+See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), and [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md) for the frozen implementation contracts.
 
 ## M6 Workflow
 
@@ -139,3 +143,19 @@ M6 keeps `research` and `trade_server` decoupled. The bridge is file-first and d
 Target-weight idempotency key is `trade_date + prediction_run_id + account_id + basket_id + config_hash`. Rebalance idempotency key is `source_target_weight_hash + planner_config_hash + account snapshot + positions + market snapshot`. `--force` clears and rebuilds the same deterministic artifact path instead of silently overwriting.
 
 The default reference price for target-quantity conversion is `previous_close`, configured in `configs/planning/rebalance_planner.yaml`. Buy quantities round down to the buy lot, and odd lots are only handled on the sell path.
+
+## M7 Workflow
+
+Run the paper-only execution sandbox after the M6 dry-run bridge:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.run_paper_execution --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only
+.\.venv\Scripts\python.exe -m scripts.reconcile_paper_run --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only
+.\.venv\Scripts\python.exe -m scripts.list_paper_runs
+```
+
+`M7` is paper-only. It reads `execution_task` and `order_intent_preview`, simulates deterministic fills on standardized `1min` bars, writes paper orders and paper trades, updates a local cash and position ledger, and emits an end-of-run reconcile report. It never calls real `send_order`.
+
+The default fill model is `bar_limit_v1` from `configs/execution/paper_fill_model.yaml`. Orders run in `sell_then_buy` order. Buy orders fill when `bar.low <= limit_price`; sell orders fill when `bar.high >= limit_price`; filled orders trade at `limit_price` on the first crossing bar. Missing bars leave orders `unfilled`.
+
+Paper cash and sellability stay deterministic. If cash is insufficient, buy orders are `rejected` with `insufficient_cash_for_paper_buy`. Ordinary A-share buys remain `T+1`, so same-day buys do not increase `sellable_quantity`; instruments that are `T+0` in master data do increase same-day `sellable_quantity`. Paper-run idempotency key is `execution_task_id + fill_model_config_hash + market_data_hash + account_state_hash`; successful runs are reused by default, failed runs can be rerun, and `--force` rebuilds the same artifact path without silent overwrite.
