@@ -1,6 +1,6 @@
 # VeighNa Quant Platform
 
-This repository implements the first six milestones of an A-share quant platform:
+This repository implements the first seven milestones of an A-share quant platform:
 
 - `M0`: repository bootstrap and local developer tooling
 - `M1`: master data schemas, A-share rules engine, and bootstrap loader
@@ -8,6 +8,7 @@ This repository implements the first six milestones of an A-share quant platform
 - `M3`: trade server bootstrap around `MainEngine`, `OmsEngine`, and the OpenCTP gateway
 - `M4`: parquet-first market data recording, standard ETL, adjustment factors, and qlib provider export
 - `M5`: standalone qlib baseline dataset, baseline model training, experiment artifacts, and daily inference
+- `M6`: file-first dry-run bridge from prediction to approved target weights, execution tasks, and order-request previews
 
 ## Scope Freeze
 
@@ -115,3 +116,26 @@ Training is idempotent by config and lineage hash. Re-running the same baseline 
 `scripts.build_standard_data --rebuild` means partition rebuild, not append. The target `trade_date/exchange/symbol` partition is cleared before rewriting, matching manifests are replaced, and adjustment factors are rebuilt from the deduplicated standard layer. Raw DQ time-order checks follow original ingest order; if `ingest_seq` exists it is treated as the canonical write order, otherwise parquet row order is used.
 
 See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), and [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md) for the frozen implementation contracts.
+
+## M6 Workflow
+
+Build target weights from a prediction artifact:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.build_target_weights --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --approved-by local_smoke
+```
+
+Then build the dry-run rebalance plan and ingest it into trade-server-side order-request previews:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.plan_rebalance --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only
+.\.venv\Scripts\python.exe -m scripts.ingest_execution_task --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --dry-run
+.\.venv\Scripts\python.exe -m scripts.list_target_weights
+.\.venv\Scripts\python.exe -m scripts.list_execution_tasks
+```
+
+M6 keeps `research` and `trade_server` decoupled. The bridge is file-first and dry-run only: it never calls `send_order`.
+
+Target-weight idempotency key is `trade_date + prediction_run_id + account_id + basket_id + config_hash`. Rebalance idempotency key is `source_target_weight_hash + planner_config_hash + account snapshot + positions + market snapshot`. `--force` clears and rebuilds the same deterministic artifact path instead of silently overwriting.
+
+The default reference price for target-quantity conversion is `previous_close`, configured in `configs/planning/rebalance_planner.yaml`. Buy quantities round down to the buy lot, and odd lots are only handled on the sell path.

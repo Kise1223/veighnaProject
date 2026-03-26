@@ -1,0 +1,14 @@
+{
+  "positions": [
+    {
+      "instrument_key": "EQ_SH_600000",
+      "total_quantity": 250,
+      "sellable_quantity": 250
+    },
+    {
+      "instrument_key": "ETF_SH_510300",
+      "total_quantity": 300,
+      "sellable_quantity": 300
+    }
+  ]
+}

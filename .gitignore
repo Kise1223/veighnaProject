@@ -22,4 +22,5 @@ data/qlib_bin/
 data/dq_reports/
 data/manifests/
 data/research/
+data/trading/
 data/bootstrap/research_sample/sample_manifest.json

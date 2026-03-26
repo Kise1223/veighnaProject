@@ -1,0 +1,5 @@
+strategy_name: baseline_long_only
+weighting: equal
+max_names: 2
+max_weight_per_name: 0.45
+cash_buffer: 0.10

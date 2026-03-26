@@ -1,0 +1,6 @@
+exec_style: close_reference
+reference_price_field: previous_close
+planning_time: "09:30:00"
+broker: DEFAULT
+plan_only: true
+cash_policy: sequential_sell_then_buy

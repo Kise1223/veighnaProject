@@ -1,0 +1,24 @@
+milestone: M6
+title: research-to-trade dry-run bridge
+status: accepted
+scope:
+  include:
+    - approved_target_weight
+    - execution_task
+    - order_intent_preview
+    - dry-run trade_server ingestion
+    - deterministic execution sample
+    - sql_ddl_freeze
+  exclude:
+    - gateway_send_order
+    - live_oms_order_placement
+    - signal_service
+    - optimizer
+    - risk_model
+acceptance:
+  - ruff_check
+  - mypy
+  - pytest
+  - build_target_weights_smoke
+  - plan_rebalance_smoke
+  - ingest_execution_task_smoke
