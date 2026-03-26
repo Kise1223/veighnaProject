@@ -37,7 +37,7 @@ from libs.execution.validation import (
     validate_static_order_inputs,
 )
 from libs.marketdata.manifest_store import ManifestStore
-from libs.marketdata.raw_store import list_partition_files, stable_hash
+from libs.marketdata.raw_store import file_sha256, list_partition_files, relative_path, stable_hash
 from libs.marketdata.symbol_mapping import InstrumentCatalog
 from libs.planning.artifacts import PlanningArtifactStore
 from libs.planning.rebalance import (
@@ -63,6 +63,9 @@ def run_paper_execution(
     basket_id: str,
     execution_task_id: str | None = None,
     config_path: Path = DEFAULT_FILL_MODEL_CONFIG,
+    account_snapshot_path: Path | None = None,
+    positions_path: Path | None = None,
+    market_snapshot_path: Path | None = None,
     force: bool = False,
 ) -> PaperExecutionResult:
     context = PaperExecutionBootstrap(project_root).bootstrap()
@@ -102,21 +105,23 @@ def run_paper_execution(
         payload.market_rules,
         load_calendars(context.project_root / "data" / "master" / "bootstrap" / "trading_calendar.json"),
     )
-    account_snapshot = load_account_snapshot(
-        context.project_root / "data" / "bootstrap" / "execution_sample" / "account_demo.json"
+    resolved_account_snapshot_path, resolved_positions_path, resolved_market_snapshot_path = (
+        _resolve_execution_input_paths(
+            project_root=context.project_root,
+            trade_date=trade_date,
+            account_snapshot_path=account_snapshot_path,
+            positions_path=positions_path,
+            market_snapshot_path=market_snapshot_path,
+        )
     )
-    positions = load_position_snapshots(
-        context.project_root / "data" / "bootstrap" / "execution_sample" / "positions_demo.json"
-    )
-    market_snapshots = load_market_snapshots(
-        context.project_root
-        / "data"
-        / "bootstrap"
-        / "execution_sample"
-        / f"market_snapshot_{trade_date.isoformat()}.json"
-    )
+    account_snapshot = load_account_snapshot(resolved_account_snapshot_path)
+    positions = load_position_snapshots(resolved_positions_path)
+    market_snapshots = load_market_snapshots(resolved_market_snapshot_path)
     avg_price_by_instrument = _load_avg_price_seed(
-        project_root=context.project_root,
+        seed_path=_resolve_avg_price_seed_path(
+            project_root=context.project_root,
+            positions_path=positions_path,
+        ),
         positions=positions,
         market_snapshots=market_snapshots,
     )
@@ -133,6 +138,7 @@ def run_paper_execution(
         trade_date=trade_date,
         intents=accepted_intents.to_dict(orient="records"),
         source_standard_build_run_id=execution_task.source_standard_build_run_id,
+        market_snapshots=market_snapshots,
     )
     account_state_hash = stable_hash(
         {
@@ -299,6 +305,7 @@ def _execute_run(
     for index, row in enumerate(sorted_intents, start=1):
         instrument_key = str(row["instrument_key"])
         instrument = instruments.get(instrument_key)
+        market_snapshot = market_snapshots.get(instrument_key)
         if instrument is None:
             try:
                 instrument = catalog.resolve(instrument_key=instrument_key).instrument
@@ -306,7 +313,11 @@ def _execute_run(
                 instrument = None
             else:
                 instruments[instrument_key] = instrument
-        previous_close = _as_decimal(row.get("previous_close"))
+        previous_close = (
+            market_snapshot.previous_close
+            if market_snapshot is not None and market_snapshot.previous_close is not None
+            else _as_decimal(row.get("previous_close"))
+        )
         reason = validate_static_order_inputs(instrument=instrument, previous_close=previous_close)
         if instrument is None:
             bars = None
@@ -455,10 +466,9 @@ def _execute_run(
             )
         orders.append(paper_order)
         if instrument is not None:
-            fallback_market = market_snapshots.get(instrument_key)
             market_prices[instrument_key] = _resolve_market_price(
                 bars=bars,
-                fallback=fallback_market.last_price if fallback_market is not None else previous_close,
+                fallback=market_snapshot.last_price if market_snapshot is not None else previous_close,
             )
 
     for instrument_key, position in ledger.positions.items():
@@ -592,13 +602,12 @@ def _latest_run_id(
 
 def _load_avg_price_seed(
     *,
-    project_root: Path,
+    seed_path: Path | None,
     positions: dict[str, PositionSnapshot],
     market_snapshots: dict[str, MarketSnapshot],
 ) -> dict[str, Decimal]:
-    seed_path = project_root / "data" / "bootstrap" / "execution_sample" / "position_cost_basis_demo.json"
     seed_payload: dict[str, str] = {}
-    if seed_path.exists():
+    if seed_path is not None and seed_path.exists():
         raw_payload = json.loads(seed_path.read_text(encoding="utf-8"))
         seed_payload = {str(item["instrument_key"]): str(item["avg_price"]) for item in raw_payload["positions"]}
     results: dict[str, Decimal] = {}
@@ -639,6 +648,7 @@ def _build_market_data_hash(
     trade_date: date,
     intents: list[dict[str, object]],
     source_standard_build_run_id: str | None,
+    market_snapshots: dict[str, MarketSnapshot],
 ) -> str:
     manifest_store = ManifestStore(project_root / "data" / "manifests")
     manifests = [
@@ -656,9 +666,21 @@ def _build_market_data_hash(
         for manifest in manifests
         if (str(manifest.instrument_key), str(manifest.symbol), str(manifest.exchange)) in wanted
     ]
+    market_snapshot_hash = stable_hash(
+        {
+            key: value.model_dump(mode="json")
+            for key, value in sorted(market_snapshots.items())
+        }
+    )
     if relevant:
         return stable_hash(
-            {f"{item.instrument_key}:{item.symbol}:{item.exchange}": item.file_hash for item in relevant}
+            {
+                "bars": {
+                    f"{item.instrument_key}:{item.symbol}:{item.exchange}": item.file_hash
+                    for item in relevant
+                },
+                "market_snapshots": market_snapshot_hash,
+            }
         )
     files = []
     for item in intents:
@@ -670,7 +692,48 @@ def _build_market_data_hash(
                 symbol=str(item["symbol"]),
             )
         )
-    return stable_hash({"files": [path.as_posix() for path in sorted(set(files))]})
+    unique_files = sorted(set(files))
+    return stable_hash(
+        {
+            "bars": [
+                {
+                    "path": relative_path(project_root, path),
+                    "file_hash": file_sha256(path),
+                }
+                for path in unique_files
+            ],
+            "market_snapshots": market_snapshot_hash,
+        }
+    )
+
+
+def _resolve_execution_input_paths(
+    *,
+    project_root: Path,
+    trade_date: date,
+    account_snapshot_path: Path | None,
+    positions_path: Path | None,
+    market_snapshot_path: Path | None,
+) -> tuple[Path, Path, Path]:
+    sample_root = project_root / "data" / "bootstrap" / "execution_sample"
+    return (
+        account_snapshot_path or sample_root / "account_demo.json",
+        positions_path or sample_root / "positions_demo.json",
+        market_snapshot_path or sample_root / f"market_snapshot_{trade_date.isoformat()}.json",
+    )
+
+
+def _resolve_avg_price_seed_path(*, project_root: Path, positions_path: Path | None) -> Path | None:
+    sample_root = project_root / "data" / "bootstrap" / "execution_sample"
+    if positions_path is None:
+        return sample_root / "position_cost_basis_demo.json"
+    for candidate in (
+        positions_path.parent / "position_cost_basis.json",
+        positions_path.parent / "position_cost_basis_demo.json",
+    ):
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def _intent_sort_key(row: dict[str, object]) -> tuple[int, str, str]:

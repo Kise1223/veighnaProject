@@ -32,3 +32,8 @@
 - Existing `success` runs are reused by default.
 - `failed` runs do not block reruns.
 - `--force` clears and rebuilds the same deterministic artifact path; silent overwrite is not allowed.
+
+## M7.1 Hardening
+
+- `scripts.run_paper_execution` now supports explicit `account_snapshot`, `positions`, and `market_snapshot` paths. The checked-in demo sample is only the default fallback, not a required hard binding.
+- When `bars_1m` manifests are unavailable or do not match the requested instruments, `market_data_hash` falls back to file-content fingerprints plus the current market snapshot payload. Same-path-but-different-content inputs must not reuse an old successful paper run.

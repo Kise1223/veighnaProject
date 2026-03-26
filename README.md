@@ -156,6 +156,14 @@ Run the paper-only execution sandbox after the M6 dry-run bridge:
 
 `M7` is paper-only. It reads `execution_task` and `order_intent_preview`, simulates deterministic fills on standardized `1min` bars, writes paper orders and paper trades, updates a local cash and position ledger, and emits an end-of-run reconcile report. It never calls real `send_order`.
 
+`scripts.run_paper_execution` has two input modes. Demo sample mode uses the checked-in execution sample automatically when no extra path flags are provided. Custom input mode overrides the paper-run inputs explicitly:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.run_paper_execution --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --account-snapshot-path data\bootstrap\execution_sample\account_demo.json --positions-path data\bootstrap\execution_sample\positions_demo.json --market-snapshot-path data\bootstrap\execution_sample\market_snapshot_2026-03-26.json
+```
+
 The default fill model is `bar_limit_v1` from `configs/execution/paper_fill_model.yaml`. Orders run in `sell_then_buy` order. Buy orders fill when `bar.low <= limit_price`; sell orders fill when `bar.high >= limit_price`; filled orders trade at `limit_price` on the first crossing bar. Missing bars leave orders `unfilled`.
 
 Paper cash and sellability stay deterministic. If cash is insufficient, buy orders are `rejected` with `insufficient_cash_for_paper_buy`. Ordinary A-share buys remain `T+1`, so same-day buys do not increase `sellable_quantity`; instruments that are `T+0` in master data do increase same-day `sellable_quantity`. Paper-run idempotency key is `execution_task_id + fill_model_config_hash + market_data_hash + account_state_hash`; successful runs are reused by default, failed runs can be rerun, and `--force` rebuilds the same artifact path without silent overwrite.
+
+That idempotency rule is unchanged in `M7.1`. When `bars_1m` manifests are missing or do not match the requested instruments, `market_data_hash` falls back to file-content fingerprints plus the current market snapshot payload, so same-path-but-different-content inputs do not incorrectly reuse an old paper run.

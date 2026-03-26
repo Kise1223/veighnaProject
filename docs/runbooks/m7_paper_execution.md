@@ -14,6 +14,17 @@
 .\.venv\Scripts\python.exe -m scripts.reconcile_paper_run --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only
 ```
 
+## Input Modes
+
+- Demo sample mode is the default. If no extra path flags are passed, `scripts.run_paper_execution` reads `data/bootstrap/execution_sample/account_demo.json`, `positions_demo.json`, and `market_snapshot_<trade_date>.json`.
+- Custom input mode overrides those files explicitly:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.run_paper_execution --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --account-snapshot-path path\to\account.json --positions-path path\to\positions.json --market-snapshot-path path\to\market_snapshot.json
+```
+
+- If custom paths are supplied, the runner uses those files first and only falls back to the demo sample for any path you did not provide.
+
 ## Paper Boundary
 
 - `scripts.run_paper_execution` only consumes M6 artifacts and local standard bars.
@@ -37,3 +48,9 @@
 - Sellable quantity insufficient: sell order becomes `rejected` with `sell_quantity_exceeds_sellable`.
 - Missing `previous_close`: order becomes `rejected` with `previous_close_missing`.
 - Missing symbol mapping: order becomes `rejected` with `symbol_mapping_missing`.
+
+## Idempotency And Manifest Fallback
+
+- Re-running the same `execution_task_id + fill_model_config_hash + market_data_hash + account_state_hash` reuses an existing successful paper run.
+- Failed runs never block reruns, and `--force` clears and rebuilds the same deterministic artifact path.
+- If `bars_1m` manifests are missing or do not match the requested instruments, `market_data_hash` falls back to the actual bar file content hashes plus the current market snapshot payload. It is not path-only.

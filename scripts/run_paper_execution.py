@@ -19,6 +19,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--account-id", required=True)
     parser.add_argument("--basket-id", required=True)
     parser.add_argument("--execution-task-id")
+    parser.add_argument("--account-snapshot-path", type=Path)
+    parser.add_argument("--positions-path", type=Path)
+    parser.add_argument("--market-snapshot-path", type=Path)
     parser.add_argument("--force", action="store_true")
     return parser.parse_args()
 
@@ -31,6 +34,9 @@ def main() -> int:
         account_id=args.account_id,
         basket_id=args.basket_id,
         execution_task_id=args.execution_task_id,
+        account_snapshot_path=args.account_snapshot_path,
+        positions_path=args.positions_path,
+        market_snapshot_path=args.market_snapshot_path,
         force=args.force,
     )
     sys.stdout.write(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n")

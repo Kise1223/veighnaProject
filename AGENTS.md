@@ -24,4 +24,4 @@
 - Keep artifacts file-first; do not add PostgreSQL write paths unless explicitly requested.
 - When behavior changes, update `README`, ADRs, runbooks, and tests together.
 - Do not commit runtime artifacts such as `data/research`, `data/trading`, `data/raw`, `data/standard`, or `data/qlib_bin`.
-- Build the smallest closed loop first; do not plan `M7` ahead unless asked.
+- Build the smallest closed loop first; do not plan `M8` ahead unless asked.
