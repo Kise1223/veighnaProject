@@ -12,8 +12,8 @@ This repository implements the first seven milestones of an A-share quant platfo
 
 ## Scope Freeze
 
-- Supported in `M0-M5`: SSE/SZSE cash equities and ETFs
-- Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, target weights, execution planner, signal service, and large-scale historical backfill
+- Supported in `M0-M6`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews
+- Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, live order placement, real order routing via `send_order`, long-running signal service processes, multi-account scheduling, complex execution algorithms, optimizers, and large-scale historical backfill
 
 ## Canonical Interpreter
 
