@@ -67,6 +67,13 @@ class ShadowEngineOutcome:
     paper_reconcile_report: PaperReconcileReportRecord
 
 
+@dataclass(frozen=True)
+class ResolvedShadowOrderParameters:
+    reference_price: Decimal
+    limit_price: Decimal
+    source_order_intent_hash: str
+
+
 def run_shadow_engine(
     *,
     project_root: Path,
@@ -516,27 +523,17 @@ def _initialize_shadow_order(
         if instrument is not None:
             instruments.setdefault(preview.instrument_key, instrument)
     del rules_repo, ledger
-    reference_price = _required_decimal(preview.reference_price)
-    if config.limit_price_source == "previous_close" and resolved_previous_close is not None:
-        limit_price = resolved_previous_close
-    else:
-        limit_price = reference_price
-    source_order_intent_hash = stable_hash(
-        {
-            "execution_task_id": execution_task_id,
-            "instrument_key": preview.instrument_key,
-            "side": preview.side,
-            "quantity": abs(preview.delta_quantity),
-            "reference_price": str(reference_price),
-            "previous_close": str(preview.previous_close) if preview.previous_close is not None else None,
-            "source_target_weight_hash": preview.source_target_weight_hash,
-        }
+    effective_params = _resolve_shadow_order_parameters(
+        execution_task_id=execution_task_id,
+        preview=preview,
+        config=config,
+        resolved_previous_close=resolved_previous_close,
     )
     order_id = "sorder_" + stable_hash(
         {
             "shadow_run_id": shadow_run_id,
             "order_index": order_index,
-            "source_order_intent_hash": source_order_intent_hash,
+            "source_order_intent_hash": effective_params.source_order_intent_hash,
         }
     )[:12]
     exchange = preview.exchange if instrument is None else instrument.exchange.value
@@ -555,10 +552,10 @@ def _initialize_shadow_order(
         side=preview.side,
         order_type="LIMIT",
         quantity=abs(preview.delta_quantity),
-        limit_price=limit_price,
-        reference_price=reference_price,
+        limit_price=effective_params.limit_price,
+        reference_price=effective_params.reference_price,
         previous_close=resolved_previous_close,
-        source_order_intent_hash=source_order_intent_hash,
+        source_order_intent_hash=effective_params.source_order_intent_hash,
         status=PaperOrderStatus.CREATED,
         created_at=created_at,
         estimated_cost=preview.estimated_cost,
@@ -855,6 +852,39 @@ def _resolve_previous_close(
     if market_snapshot is not None and market_snapshot.previous_close is not None:
         return market_snapshot.previous_close
     return preview.previous_close
+
+
+def _resolve_shadow_order_parameters(
+    *,
+    execution_task_id: str,
+    preview: OrderIntentPreviewRecord,
+    config: ShadowSessionConfig,
+    resolved_previous_close: Decimal | None,
+) -> ResolvedShadowOrderParameters:
+    reference_price = _required_decimal(preview.reference_price)
+    hash_previous_close: Decimal | None
+    if config.limit_price_source == "previous_close" and resolved_previous_close is not None:
+        limit_price = resolved_previous_close
+        hash_previous_close = resolved_previous_close
+    else:
+        limit_price = reference_price
+        hash_previous_close = preview.previous_close
+    source_order_intent_hash = stable_hash(
+        {
+            "execution_task_id": execution_task_id,
+            "instrument_key": preview.instrument_key,
+            "side": preview.side,
+            "quantity": abs(preview.delta_quantity),
+            "reference_price": str(reference_price),
+            "previous_close": str(hash_previous_close) if hash_previous_close is not None else None,
+            "source_target_weight_hash": preview.source_target_weight_hash,
+        }
+    )
+    return ResolvedShadowOrderParameters(
+        reference_price=reference_price,
+        limit_price=limit_price,
+        source_order_intent_hash=source_order_intent_hash,
+    )
 
 
 def _normalize_preview_created_at(

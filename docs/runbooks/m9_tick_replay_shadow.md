@@ -37,6 +37,8 @@
 - Sell: first valid-session tick with `bid_price_1 >= limit_price` fills at `bid_price_1`.
 - If the top quote is missing, the first version falls back to `last_price` when it crosses the limit.
 - No queue model, stochastic behavior, or complex partial fills are introduced.
+- When `limit_price_source=previous_close`, the shadow order uses resolved `previous_close` with priority `market snapshot.previous_close -> preview.previous_close`, and `source_order_intent_hash` uses that same resolved value.
+- Under the default `reference_price` config, the hash payload keeps the existing preview-based `previous_close` behavior.
 
 ## Session Behavior
 

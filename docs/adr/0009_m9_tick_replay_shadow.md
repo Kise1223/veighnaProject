@@ -20,6 +20,7 @@
 - Buy orders fill on the first valid-session tick where `ask_price_1 <= limit_price`, using `ask_price_1` as fill price.
 - Sell orders fill on the first valid-session tick where `bid_price_1 >= limit_price`, using `bid_price_1` as fill price.
 - If the top quote is missing, the first version falls back to `last_price` when it crosses the limit.
+- When `limit_price_source=previous_close`, the engine uses the resolved `previous_close` from `market snapshot.previous_close -> preview.previous_close` for both the final order fields and `source_order_intent_hash`, so order lineage matches the effective parameters.
 - Lunch break and other non-session ticks do not trigger fills because session checks keep reusing the existing trading-phase rules.
 - No queue simulation, stochastic fills, or complex partial-fill model is introduced in `M9`.
 
