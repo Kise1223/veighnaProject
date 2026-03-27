@@ -10,11 +10,12 @@ This repository implements the first eight milestones of an A-share quant platfo
 - `M5`: standalone qlib baseline dataset, baseline model training, experiment artifacts, and daily inference
 - `M6`: file-first dry-run bridge from prediction to approved target weights, execution tasks, and order-request previews
 - `M7`: paper-only execution sandbox, deterministic fills, local ledger, and end-of-run reconcile reports
+- `M8`: replay-driven, session-aware shadow execution that reuses the paper ledger and reconcile path
 
 ## Scope Freeze
 
-- Supported in `M0-M7`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, plus the `M7` paper execution sandbox and local ledger
-- Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, live order placement, real order routing via `send_order`, long-running signal service processes, multi-account scheduling, complex execution algorithms, optimizers, and large-scale historical backfill
+- Supported in `M0-M8`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, the `M7` one-shot paper execution sandbox and local ledger, and the `M8` replay-driven shadow session
+- Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, live order placement, real order routing via `send_order`, broker sync, long-running signal service processes, multi-account scheduling, complex execution algorithms, optimizers, order-book or queue simulation, and large-scale historical backfill
 
 ## Canonical Interpreter
 
@@ -74,7 +75,7 @@ libs/common/          shared logging and time helpers
 libs/marketdata/      M4 recorder, ETL, DQ, adjustment, and qlib export helpers
 libs/research/        M5 research artifact schemas, lineage, and file-first storage
 libs/planning/        M6 target-weight, rebalance, and dry-run bridge helpers
-libs/execution/       M7 paper execution, fill model, local ledger, and reconcile helpers
+libs/execution/       M7 paper execution, M8 shadow session, fill model, local ledger, and reconcile helpers
 libs/schemas/         pydantic schemas and canonical identifiers
 libs/rules_engine/    A-share rule snapshots, phases, validation, and costs
 infra/sql/postgres/   bootstrap SQL and schema definitions
@@ -97,7 +98,7 @@ scripts/              local developer entrypoints and ETL/loader CLIs
 - Raw market data is append-only parquet with manifests, while standardized layers remain rebuildable from raw plus master data plus corporate actions.
 - Qlib is an optional research consumer of exported provider files and is not imported by the trade runtime startup path.
 - Research artifacts remain file-first in `data/research/`, and every prediction can be traced back to one `model_run`, one qlib export run, and one standard build run.
-- `M7` paper execution remains file-first in `data/trading/` and never calls real `send_order`.
+- `M7/M8` paper execution remains file-first in `data/trading/` and never calls real `send_order`.
 
 ## M5 Workflow
 
@@ -119,7 +120,7 @@ Training is idempotent by config and lineage hash. Re-running the same baseline 
 
 `scripts.build_standard_data --rebuild` means partition rebuild, not append. The target `trade_date/exchange/symbol` partition is cleared before rewriting, matching manifests are replaced, and adjustment factors are rebuilt from the deduplicated standard layer. Raw DQ time-order checks follow original ingest order; if `ingest_seq` exists it is treated as the canonical write order, otherwise parquet row order is used.
 
-See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), and [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md) for the frozen implementation contracts.
+See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md), and [M8 Replay-Driven Shadow Session](docs/adr/0008_m8_shadow_session.md) for the frozen implementation contracts.
 
 ## M6 Workflow
 
@@ -171,3 +172,19 @@ Paper cash and sellability stay deterministic. If cash is insufficient, buy orde
 That idempotency rule is unchanged in `M7.1`. When `bars_1m` manifests are missing or do not match the requested instruments, `market_data_hash` falls back to file-content fingerprints plus the current market snapshot payload, so same-path-but-different-content inputs do not incorrectly reuse an old paper run.
 
 `scripts.reconcile_paper_run` no longer silently picks the latest run when the selector is ambiguous. If exactly one paper run matches `trade_date + account_id + basket_id`, the short form still works. If multiple runs match, the CLI now returns a clear error and requires `--paper-run-id` or `--latest`. `--execution-task-id` can be used as a narrower filter, and `--execution-task-id ... --latest` resolves the newest run inside that task.
+
+## M8 Workflow
+
+Run the replay-driven shadow session after the M6 dry-run bridge:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.run_shadow_session --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only
+.\.venv\Scripts\python.exe -m scripts.reconcile_shadow_session --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only
+.\.venv\Scripts\python.exe -m scripts.list_shadow_sessions
+```
+
+`M7` is one-shot paper execution. `M8` is replay-driven shadow execution: orders enter `working`, replayed `1min` bars advance in time order, fills happen on the first crossing bar inside a valid matching phase, lunch break and other non-session timestamps are ignored, and remaining working orders become `expired_end_of_session`.
+
+`M8` is still paper-only. It never calls real `send_order`, it does not introduce a resident daemon, and it finalizes into the same file-first paper ledger and reconcile shapes used by `M7`.
+
+Shadow-session idempotency key is `execution_task_id + fill_model_config_hash + market_data_hash + account_state_hash + market_replay_mode`; successful runs are reused by default, failed runs can be rerun, and `--force` rebuilds the same artifact path without silent overwrite.

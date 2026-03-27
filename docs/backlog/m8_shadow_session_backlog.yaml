@@ -1,0 +1,24 @@
+milestone: M8
+title: replay-driven shadow session
+status: accepted
+scope:
+  in_scope:
+    - replay-driven shadow session
+    - session-aware working order lifecycle
+    - incremental paper fills over replayed market data
+    - reuse of existing M7 ledger and reconcile outputs
+    - file-first artifacts and SQL DDL freeze
+  out_of_scope:
+    - real gateway.send_order
+    - broker routing
+    - live broker sync
+    - resident daemon
+    - multi-account orchestration
+    - optimizer
+    - order-book or queue simulation
+acceptance:
+  - shadow session CLI runs from execution_task and order_intent_preview
+  - session emits working/fill/expiry lifecycle events
+  - final paper ledger snapshots and reconcile report are produced
+  - send_order is never called
+  - idempotency and lineage are covered by tests

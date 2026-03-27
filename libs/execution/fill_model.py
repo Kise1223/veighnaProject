@@ -70,6 +70,24 @@ def simulate_limit_fill(
     return FillDecision(status=PaperOrderStatus.UNFILLED, reason="limit_not_crossed")
 
 
+def simulate_limit_fill_on_bar(
+    *,
+    side: str,
+    limit_price: Decimal,
+    bar_row: dict[str, object],
+) -> FillDecision | None:
+    low = Decimal(str(bar_row["low"]))
+    high = Decimal(str(bar_row["high"]))
+    crossed = low <= limit_price if side == "BUY" else high >= limit_price
+    if not crossed:
+        return None
+    return FillDecision(
+        status=PaperOrderStatus.FILLED,
+        fill_bar_dt=_as_datetime(bar_row["bar_dt"]),
+        fill_price=limit_price,
+    )
+
+
 def _as_datetime(value: object) -> datetime:
     if isinstance(value, datetime):
         return ensure_cn_aware(value)

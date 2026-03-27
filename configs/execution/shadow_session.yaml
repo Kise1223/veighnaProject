@@ -1,0 +1,11 @@
+market_replay_mode: bars_1m
+fill_model_name: bar_limit_shadow_v1
+order_type: LIMIT
+limit_price_source: reference_price
+fill_price_rule: limit_price
+execution_order: sell_then_buy
+missing_bar_behavior: expire
+end_of_session_behavior: expire
+require_previous_close: true
+allow_partial_fill: false
+broker: DEFAULT
