@@ -66,6 +66,7 @@ def run_paper_execution(
     account_snapshot_path: Path | None = None,
     positions_path: Path | None = None,
     market_snapshot_path: Path | None = None,
+    position_cost_basis_path: Path | None = None,
     force: bool = False,
 ) -> PaperExecutionResult:
     context = PaperExecutionBootstrap(project_root).bootstrap()
@@ -121,6 +122,7 @@ def run_paper_execution(
         seed_path=_resolve_avg_price_seed_path(
             project_root=context.project_root,
             positions_path=positions_path,
+            position_cost_basis_path=position_cost_basis_path,
         ),
         positions=positions,
         market_snapshots=market_snapshots,
@@ -249,19 +251,24 @@ def load_reconcile_report(
     account_id: str,
     basket_id: str,
     paper_run_id: str | None = None,
+    execution_task_id: str | None = None,
+    latest: bool = False,
 ) -> PaperReconcileReportRecord:
     store = ExecutionArtifactStore(project_root)
-    resolved_run_id = paper_run_id or _latest_run_id(
-        store,
+    resolved_run = _select_reconcile_run(
+        store=store,
         trade_date=trade_date,
         account_id=account_id,
         basket_id=basket_id,
+        paper_run_id=paper_run_id,
+        execution_task_id=execution_task_id,
+        latest=latest,
     )
     return store.load_reconcile_report(
         trade_date=trade_date,
         account_id=account_id,
         basket_id=basket_id,
-        paper_run_id=resolved_run_id,
+        paper_run_id=resolved_run.paper_run_id,
     )
 
 
@@ -580,23 +587,55 @@ def _resolve_execution_task_manifest(
     )
 
 
-def _latest_run_id(
+def _select_reconcile_run(
     store: ExecutionArtifactStore,
     *,
     trade_date: date,
     account_id: str,
     basket_id: str,
-) -> str:
-    for run in store.list_runs():
-        if (
-            run.trade_date == trade_date
-            and run.account_id == account_id
-            and run.basket_id == basket_id
-        ):
-            return run.paper_run_id
-    raise FileNotFoundError(
-        f"no paper run found for trade_date={trade_date.isoformat()} "
-        f"account_id={account_id} basket_id={basket_id}"
+    paper_run_id: str | None,
+    execution_task_id: str | None,
+    latest: bool,
+) -> PaperExecutionRunRecord:
+    runs = [
+        run
+        for run in store.list_runs()
+        if run.trade_date == trade_date
+        and run.account_id == account_id
+        and run.basket_id == basket_id
+    ]
+    if not runs:
+        raise FileNotFoundError(
+            f"no paper run found for trade_date={trade_date.isoformat()} "
+            f"account_id={account_id} basket_id={basket_id}"
+        )
+    if paper_run_id is not None:
+        for run in runs:
+            if run.paper_run_id == paper_run_id:
+                return run
+        raise FileNotFoundError(
+            f"no paper run found for paper_run_id={paper_run_id} "
+            f"trade_date={trade_date.isoformat()} account_id={account_id} basket_id={basket_id}"
+        )
+    filtered_runs = runs
+    if execution_task_id is not None:
+        filtered_runs = [run for run in runs if run.execution_task_id == execution_task_id]
+        if not filtered_runs:
+            raise FileNotFoundError(
+                f"no paper run found for execution_task_id={execution_task_id} "
+                f"trade_date={trade_date.isoformat()} account_id={account_id} basket_id={basket_id}"
+            )
+    if len(filtered_runs) == 1:
+        return filtered_runs[0]
+    if latest:
+        return filtered_runs[0]
+    qualifier = (
+        f"execution_task_id={execution_task_id}"
+        if execution_task_id is not None
+        else f"trade_date={trade_date.isoformat()} account_id={account_id} basket_id={basket_id}"
+    )
+    raise ValueError(
+        f"multiple paper runs match {qualifier}; pass --paper-run-id or --latest"
     )
 
 
@@ -723,7 +762,16 @@ def _resolve_execution_input_paths(
     )
 
 
-def _resolve_avg_price_seed_path(*, project_root: Path, positions_path: Path | None) -> Path | None:
+def _resolve_avg_price_seed_path(
+    *,
+    project_root: Path,
+    positions_path: Path | None,
+    position_cost_basis_path: Path | None,
+) -> Path | None:
+    if position_cost_basis_path is not None:
+        if not position_cost_basis_path.exists():
+            raise FileNotFoundError(f"position cost basis file not found: {position_cost_basis_path}")
+        return position_cost_basis_path
     sample_root = project_root / "data" / "bootstrap" / "execution_sample"
     if positions_path is None:
         return sample_root / "position_cost_basis_demo.json"

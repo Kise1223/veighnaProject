@@ -13,7 +13,7 @@ from apps.trade_server.app.paper.runner import run_paper_execution
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--trade-date", type=date.fromisoformat, required=True)
     parser.add_argument("--account-id", required=True)
@@ -22,12 +22,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--account-snapshot-path", type=Path)
     parser.add_argument("--positions-path", type=Path)
     parser.add_argument("--market-snapshot-path", type=Path)
+    parser.add_argument("--position-cost-basis-path", type=Path)
     parser.add_argument("--force", action="store_true")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     result = run_paper_execution(
         project_root=ROOT,
         trade_date=args.trade_date,
@@ -37,6 +38,7 @@ def main() -> int:
         account_snapshot_path=args.account_snapshot_path,
         positions_path=args.positions_path,
         market_snapshot_path=args.market_snapshot_path,
+        position_cost_basis_path=args.position_cost_basis_path,
         force=args.force,
     )
     sys.stdout.write(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2) + "\n")

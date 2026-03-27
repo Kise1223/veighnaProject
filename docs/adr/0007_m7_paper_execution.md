@@ -37,3 +37,8 @@
 
 - `scripts.run_paper_execution` now supports explicit `account_snapshot`, `positions`, and `market_snapshot` paths. The checked-in demo sample is only the default fallback, not a required hard binding.
 - When `bars_1m` manifests are unavailable or do not match the requested instruments, `market_data_hash` falls back to file-content fingerprints plus the current market snapshot payload. Same-path-but-different-content inputs must not reuse an old successful paper run.
+
+## M7.2 CLI And Input Hardening
+
+- `scripts.reconcile_paper_run` no longer silently picks the latest run when multiple paper runs match the same `trade_date + account_id + basket_id`. Ambiguous requests must use `--paper-run-id` or `--latest`; `--execution-task-id` is supported as a narrower selector.
+- `scripts.run_paper_execution` now accepts an explicit `position_cost_basis_path`. If that path is omitted, companion discovery remains in place next to the chosen positions file before falling back to market-snapshot seeding.

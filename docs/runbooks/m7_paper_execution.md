@@ -11,7 +11,7 @@
 .\.venv\Scripts\python.exe -m scripts.plan_rebalance --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only
 .\.venv\Scripts\python.exe -m scripts.ingest_execution_task --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --dry-run
 .\.venv\Scripts\python.exe -m scripts.run_paper_execution --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only
-.\.venv\Scripts\python.exe -m scripts.reconcile_paper_run --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only
+.\.venv\Scripts\python.exe -m scripts.reconcile_paper_run --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --paper-run-id paper_51f72560b628
 ```
 
 ## Input Modes
@@ -20,10 +20,19 @@
 - Custom input mode overrides those files explicitly:
 
 ```powershell
-.\.venv\Scripts\python.exe -m scripts.run_paper_execution --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --account-snapshot-path path\to\account.json --positions-path path\to\positions.json --market-snapshot-path path\to\market_snapshot.json
+.\.venv\Scripts\python.exe -m scripts.run_paper_execution --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --account-snapshot-path path\to\account.json --positions-path path\to\positions.json --market-snapshot-path path\to\market_snapshot.json --position-cost-basis-path path\to\position_cost_basis.json
 ```
 
 - If custom paths are supplied, the runner uses those files first and only falls back to the demo sample for any path you did not provide.
+- `--position-cost-basis-path` has highest priority. If it is omitted, the runner looks next to the chosen positions file for `position_cost_basis.json` or `position_cost_basis_demo.json`. If neither exists, average-price seeding falls back to `market_snapshot.previous_close`.
+
+## Reconcile Selectors
+
+- `--paper-run-id` is the most precise selector and should be used whenever you already know the run you want.
+- `--execution-task-id` filters paper runs to one execution task. If that still matches multiple runs, add `--latest` or switch to `--paper-run-id`.
+- `--latest` resolves the newest run in the current filter scope.
+- If you pass no selector and exactly one paper run matches `trade_date + account_id + basket_id`, the CLI still works.
+- If multiple runs match and you pass no selector, the CLI now fails fast and tells you to add `--paper-run-id` or `--latest`.
 
 ## Paper Boundary
 
