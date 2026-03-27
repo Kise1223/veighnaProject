@@ -187,4 +187,6 @@ Run the replay-driven shadow session after the M6 dry-run bridge:
 
 `M8` is still paper-only. It never calls real `send_order`, it does not introduce a resident daemon, and it finalizes into the same file-first paper ledger and reconcile shapes used by `M7`.
 
+Shadow-session `previous_close` now uses one priority everywhere in the `M8` engine: current market-snapshot `previous_close` first, preview `previous_close` second. This affects validation and sellability checks in all cases, and it also affects order `limit_price` only when `configs/execution/shadow_session.yaml` sets `limit_price_source=previous_close`. Under the default `reference_price` config, limit-price behavior is unchanged.
+
 Shadow-session idempotency key is `execution_task_id + fill_model_config_hash + market_data_hash + account_state_hash + market_replay_mode`; successful runs are reused by default, failed runs can be rerun, and `--force` rebuilds the same artifact path without silent overwrite.

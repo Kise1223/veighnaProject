@@ -114,6 +114,10 @@ def run_shadow_engine(
         ),
     )
     for index, preview in enumerate(ordered_previews, start=1):
+        previous_close = _resolve_previous_close(
+            preview=preview,
+            market_snapshots=market_snapshots,
+        )
         order_id, paper_order = _initialize_shadow_order(
             shadow_run_id=shadow_run_id,
             paper_run_id=paper_run_id,
@@ -132,6 +136,7 @@ def run_shadow_engine(
             source_qlib_export_run_id=source_qlib_export_run_id,
             source_standard_build_run_id=source_standard_build_run_id,
             instruments=instruments,
+            resolved_previous_close=previous_close,
         )
         instrument = instruments.get(preview.instrument_key)
         preview_created_at = ensure_cn_aware(preview.created_at)
@@ -165,15 +170,9 @@ def run_shadow_engine(
                 created_at=created_at,
                 source_prediction_run_id=source_prediction_run_id,
                 source_qlib_export_run_id=source_qlib_export_run_id,
-                source_standard_build_run_id=source_standard_build_run_id,
+                    source_standard_build_run_id=source_standard_build_run_id,
+                )
             )
-        )
-        previous_close = (
-            market_snapshots[preview.instrument_key].previous_close
-            if preview.instrument_key in market_snapshots
-            and market_snapshots[preview.instrument_key].previous_close is not None
-            else preview.previous_close
-        )
         static_reason = (
             preview.validation_reason
             if preview.validation_status != ValidationStatus.ACCEPTED
@@ -543,6 +542,7 @@ def _initialize_shadow_order(
     source_qlib_export_run_id: str | None,
     source_standard_build_run_id: str | None,
     instruments: dict[str, Instrument],
+    resolved_previous_close: Decimal | None,
 ) -> tuple[str, PaperOrderRecord]:
     try:
         instrument = catalog.resolve(instrument_key=preview.instrument_key).instrument
@@ -553,8 +553,8 @@ def _initialize_shadow_order(
             instruments.setdefault(preview.instrument_key, instrument)
     del rules_repo, ledger
     reference_price = _required_decimal(preview.reference_price)
-    if config.limit_price_source == "previous_close" and preview.previous_close is not None:
-        limit_price = preview.previous_close
+    if config.limit_price_source == "previous_close" and resolved_previous_close is not None:
+        limit_price = resolved_previous_close
     else:
         limit_price = reference_price
     source_order_intent_hash = stable_hash(
@@ -593,7 +593,7 @@ def _initialize_shadow_order(
         quantity=abs(preview.delta_quantity),
         limit_price=limit_price,
         reference_price=reference_price,
-        previous_close=preview.previous_close,
+        previous_close=resolved_previous_close,
         source_order_intent_hash=source_order_intent_hash,
         status=PaperOrderStatus.CREATED,
         created_at=created_at,
@@ -749,6 +749,17 @@ def _required_decimal(value: Decimal | None) -> Decimal:
     if value is None:
         raise ValueError("expected decimal value for shadow session")
     return value
+
+
+def _resolve_previous_close(
+    *,
+    preview: OrderIntentPreviewRecord,
+    market_snapshots: dict[str, MarketSnapshot],
+) -> Decimal | None:
+    market_snapshot = market_snapshots.get(preview.instrument_key)
+    if market_snapshot is not None and market_snapshot.previous_close is not None:
+        return market_snapshot.previous_close
+    return preview.previous_close
 
 
 def _normalize_preview_created_at(

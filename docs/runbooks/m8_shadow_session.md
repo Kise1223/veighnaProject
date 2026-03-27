@@ -28,6 +28,7 @@
 - A sell fills on the first replayed bar where `bar.high >= limit_price`.
 - Orders that never cross remain `working` until session end, then become `expired_end_of_session`.
 - Lunch break and other non-session bars do not trigger fills because matching reuses the existing trading-phase rules.
+- `previous_close` is resolved uniformly as current market-snapshot `previous_close` first and preview `previous_close` second. That priority always drives validation and sellability checks, and it only changes `limit_price` when `limit_price_source=previous_close`.
 
 ## Paper Boundary
 
