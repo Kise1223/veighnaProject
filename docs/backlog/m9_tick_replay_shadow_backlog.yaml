@@ -1,0 +1,22 @@
+milestone: M9
+title: tick_replay_shadow_session
+status: completed
+scope:
+  included:
+    - ticks_l1 shadow replay mode
+    - deterministic tick fill rules
+    - file-first shadow artifacts
+    - m7 ledger and reconcile reuse
+    - cli, tests, readme, adr, runbook
+  excluded:
+    - live send_order
+    - broker sync
+    - resident daemon
+    - optimizer
+    - queue simulation
+acceptance:
+  - bars_1m mode remains backward compatible
+  - ticks_l1 mode fills deterministically from tick input
+  - lunch break and non-session ticks do not fill orders
+  - tick_source_hash participates in reuse semantics
+  - send_order_called remains false

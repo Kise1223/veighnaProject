@@ -16,6 +16,12 @@ def prepare_research_workspace(tmp_path: Path) -> Path:
         ROOT / "data" / "bootstrap" / "execution_sample",
         tmp_path / "data" / "bootstrap" / "execution_sample",
     )
+    shadow_tick_sample = ROOT / "data" / "bootstrap" / "shadow_tick_sample"
+    if shadow_tick_sample.exists():
+        shutil.copytree(
+            shadow_tick_sample,
+            tmp_path / "data" / "bootstrap" / "shadow_tick_sample",
+        )
     shutil.copytree(ROOT / "configs" / "qlib", tmp_path / "configs" / "qlib")
     shutil.copytree(ROOT / "configs" / "planning", tmp_path / "configs" / "planning")
     shutil.copytree(ROOT / "configs" / "execution", tmp_path / "configs" / "execution")

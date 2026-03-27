@@ -20,9 +20,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--basket-id", required=True)
     parser.add_argument("--execution-task-id")
     parser.add_argument("--config", default="configs/execution/shadow_session.yaml")
+    parser.add_argument("--market-replay-mode", choices=["bars_1m", "ticks_l1"])
     parser.add_argument("--account-snapshot-path", type=Path)
     parser.add_argument("--positions-path", type=Path)
     parser.add_argument("--market-snapshot-path", type=Path)
+    parser.add_argument("--tick-input-path", type=Path)
     parser.add_argument("--position-cost-basis-path", type=Path)
     parser.add_argument("--force", action="store_true")
     return parser.parse_args(argv)
@@ -40,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
         account_snapshot_path=args.account_snapshot_path,
         positions_path=args.positions_path,
         market_snapshot_path=args.market_snapshot_path,
+        market_replay_mode=args.market_replay_mode,
+        tick_input_path=args.tick_input_path,
         position_cost_basis_path=args.position_cost_basis_path,
         force=args.force,
     )
@@ -49,4 +53,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

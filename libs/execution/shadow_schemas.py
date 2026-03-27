@@ -39,6 +39,7 @@ class ShadowSessionConfig(BaseModel):
     order_type: str = Field(default="LIMIT", min_length=1)
     limit_price_source: str = Field(default="reference_price", min_length=1)
     fill_price_rule: str = Field(default="limit_price", min_length=1)
+    tick_price_fallback: str = Field(default="last_price", min_length=1)
     execution_order: str = Field(default="sell_then_buy", min_length=1)
     missing_bar_behavior: str = Field(default="expire", min_length=1)
     end_of_session_behavior: str = Field(default="expire", min_length=1)
@@ -62,6 +63,7 @@ class ShadowSessionRunRecord(BaseModel):
     fill_model_config_hash: str = Field(min_length=1)
     market_data_hash: str = Field(min_length=1)
     account_state_hash: str = Field(min_length=1)
+    tick_source_hash: str | None = None
     status: ShadowRunStatus
     started_at: datetime | None = None
     ended_at: datetime | None = None
@@ -85,6 +87,8 @@ class ShadowSessionManifest(BaseModel):
     created_at: datetime
     started_at: datetime | None = None
     ended_at: datetime | None = None
+    market_replay_mode: str | None = None
+    tick_source_hash: str | None = None
     run_file_path: str = Field(min_length=1)
     run_file_hash: str = Field(min_length=1)
     order_events_file_path: str | None = None
@@ -184,6 +188,8 @@ class ShadowSessionLineage(BaseModel):
     paper_run_id: str | None = None
     execution_task_id: str = Field(min_length=1)
     strategy_run_id: str = Field(min_length=1)
+    market_replay_mode: str | None = None
+    tick_source_hash: str | None = None
     source_prediction_run_id: str = Field(min_length=1)
     source_qlib_export_run_id: str | None = None
     source_standard_build_run_id: str | None = None

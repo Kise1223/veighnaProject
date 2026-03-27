@@ -18,6 +18,12 @@ def resolve_shadow_run_lineage(
     shadow_run_id: str,
 ) -> ShadowSessionLineage:
     store = ShadowArtifactStore(project_root)
+    run = store.load_run(
+        trade_date=trade_date,
+        account_id=account_id,
+        basket_id=basket_id,
+        shadow_run_id=shadow_run_id,
+    )
     manifest = store.load_manifest(
         trade_date=trade_date,
         account_id=account_id,
@@ -29,6 +35,8 @@ def resolve_shadow_run_lineage(
         paper_run_id=manifest.paper_run_id,
         execution_task_id=manifest.execution_task_id,
         strategy_run_id=manifest.strategy_run_id,
+        market_replay_mode=run.market_replay_mode,
+        tick_source_hash=run.tick_source_hash,
         source_prediction_run_id=manifest.source_prediction_run_id,
         source_qlib_export_run_id=manifest.source_qlib_export_run_id,
         source_standard_build_run_id=manifest.source_standard_build_run_id,

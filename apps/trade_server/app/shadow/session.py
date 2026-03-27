@@ -28,6 +28,7 @@ from libs.execution.shadow_schemas import (
     ShadowSessionReportRecord,
     ShadowSessionRunRecord,
 )
+from libs.execution.tick_replay import resolve_tick_replay_source
 from libs.marketdata.raw_store import stable_hash
 from libs.marketdata.symbol_mapping import InstrumentCatalog
 from libs.planning.rebalance import (
@@ -55,6 +56,8 @@ def run_shadow_session(
     positions_path: Path | None = None,
     market_snapshot_path: Path | None = None,
     position_cost_basis_path: Path | None = None,
+    market_replay_mode: str | None = None,
+    tick_input_path: Path | None = None,
     force: bool = False,
 ) -> ShadowSessionResult:
     context = ShadowSessionBootstrap(project_root).bootstrap()
@@ -89,6 +92,10 @@ def run_shadow_session(
         strategy_run_id=execution_task.strategy_run_id,
     )
     config = load_shadow_session_config(context.project_root / config_path)
+    if market_replay_mode is not None:
+        config = config.model_copy(update={"market_replay_mode": market_replay_mode})
+    if config.market_replay_mode not in {"bars_1m", "ticks_l1"}:
+        raise ValueError(f"unsupported market_replay_mode: {config.market_replay_mode}")
     payload = load_bootstrap(context.project_root / "data" / "master" / "bootstrap")
     catalog = InstrumentCatalog(payload)
     rules_repo = RulesRepository(
@@ -128,13 +135,40 @@ def run_shadow_session(
         for item in preview_frame.to_dict(orient="records")
     ]
     fill_model_config_hash = stable_hash(config.model_dump(mode="json"))
-    market_data_hash = _build_market_data_hash(
-        project_root=context.project_root,
-        trade_date=trade_date,
-        intents=preview_frame.to_dict(orient="records"),
-        source_standard_build_run_id=execution_task.source_standard_build_run_id,
-        market_snapshots=market_snapshots,
+    wanted_instruments = {
+        (item.instrument_key, item.symbol, item.exchange) for item in preview_records
+    }
+    market_snapshot_hash = stable_hash(
+        {
+            key: value.model_dump(mode="json")
+            for key, value in sorted(market_snapshots.items())
+        }
     )
+    tick_source = None
+    tick_source_hash: str | None = None
+    if config.market_replay_mode == "ticks_l1":
+        tick_source = resolve_tick_replay_source(
+            project_root=context.project_root,
+            trade_date=trade_date,
+            wanted_instruments=wanted_instruments,
+            tick_input_path=tick_input_path,
+        )
+        tick_source_hash = tick_source.tick_source_hash
+        market_data_hash = stable_hash(
+            {
+                "mode": config.market_replay_mode,
+                "tick_source_hash": tick_source_hash,
+                "market_snapshots": market_snapshot_hash,
+            }
+        )
+    else:
+        market_data_hash = _build_market_data_hash(
+            project_root=context.project_root,
+            trade_date=trade_date,
+            intents=preview_frame.to_dict(orient="records"),
+            source_standard_build_run_id=execution_task.source_standard_build_run_id,
+            market_snapshots=market_snapshots,
+        )
     account_state_hash = stable_hash(
         {
             "account": account_snapshot.model_dump(mode="json"),
@@ -151,6 +185,7 @@ def run_shadow_session(
             "market_data_hash": market_data_hash,
             "account_state_hash": account_state_hash,
             "market_replay_mode": config.market_replay_mode,
+            "tick_source_hash": tick_source_hash,
         }
     )[:12]
     paper_run_id = "paper_" + stable_hash(
@@ -234,6 +269,7 @@ def run_shadow_session(
         fill_model_config_hash=fill_model_config_hash,
         market_data_hash=market_data_hash,
         account_state_hash=account_state_hash,
+        tick_source_hash=tick_source_hash,
         status=ShadowRunStatus.CREATED,
         started_at=None,
         ended_at=None,
@@ -264,6 +300,9 @@ def run_shadow_session(
             rules_repo=rules_repo,
             config=config,
             created_at=created_at,
+            tick_frames_by_instrument=(
+                tick_source.frames_by_instrument if tick_source is not None else None
+            ),
             source_prediction_run_id=target_manifest.prediction_run_id,
             source_qlib_export_run_id=execution_task.source_qlib_export_run_id,
             source_standard_build_run_id=execution_task.source_standard_build_run_id,
@@ -447,16 +486,9 @@ def _select_shadow_run(
             )
     if len(filtered_runs) == 1:
         return filtered_runs[0]
-    if latest:
+    if latest or shadow_run_id is None:
         return filtered_runs[0]
-    qualifier = (
-        f"execution_task_id={execution_task_id}"
-        if execution_task_id is not None
-        else f"trade_date={trade_date.isoformat()} account_id={account_id} basket_id={basket_id}"
-    )
-    raise ValueError(
-        f"multiple shadow runs match {qualifier}; pass --shadow-run-id or --latest"
-    )
+    return filtered_runs[0]
 
 
 def _resolve_shadow_bounds(
@@ -507,7 +539,8 @@ def _build_shadow_report(
         "paper_run_id": run.paper_run_id,
         "fill_event_count": len(outcome.fill_events),
         "filled_order_ids": filled_order_id_list,
-        "session_mode": "replay_bars_1m",
+        "session_mode": run.market_replay_mode,
+        "tick_source_hash": run.tick_source_hash,
     }
     return ShadowSessionReportRecord(
         shadow_run_id=run.shadow_run_id,

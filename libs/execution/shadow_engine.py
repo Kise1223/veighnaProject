@@ -37,6 +37,11 @@ from libs.execution.shadow_schemas import (
     ShadowSessionConfig,
 )
 from libs.execution.shadow_state import ShadowWorkingOrder, shadow_order_sort_key
+from libs.execution.tick_replay import (
+    collect_tick_replay_events,
+    last_tick_price,
+    simulate_limit_fill_on_tick,
+)
 from libs.execution.validation import (
     validate_cash_available,
     validate_sellable_quantity,
@@ -82,6 +87,7 @@ def run_shadow_engine(
     rules_repo: RulesRepository,
     config: ShadowSessionConfig,
     created_at: datetime,
+    tick_frames_by_instrument: dict[str, Any] | None,
     source_prediction_run_id: str,
     source_qlib_export_run_id: str | None,
     source_standard_build_run_id: str | None,
@@ -170,9 +176,9 @@ def run_shadow_engine(
                 created_at=created_at,
                 source_prediction_run_id=source_prediction_run_id,
                 source_qlib_export_run_id=source_qlib_export_run_id,
-                    source_standard_build_run_id=source_standard_build_run_id,
-                )
+                source_standard_build_run_id=source_standard_build_run_id,
             )
+        )
         static_reason = (
             preview.validation_reason
             if preview.validation_status != ValidationStatus.ACCEPTED
@@ -312,146 +318,103 @@ def run_shadow_engine(
 
     bars_cache: dict[str, Any] = {}
     bar_lookup: dict[str, dict[datetime, dict[str, object]]] = {}
-    for order in working_orders:
-        if order.instrument.instrument_key in bars_cache:
-            continue
-        frame = load_bars_for_order(
-            project_root=project_root,
-            trade_date=trade_date,
-            exchange=order.instrument.exchange.value,
-            symbol=order.instrument.symbol,
-            source_standard_build_run_id=source_standard_build_run_id,
-        )
-        bars_cache[order.instrument.instrument_key] = frame
-        bar_lookup[order.instrument.instrument_key] = {
-            ensure_cn_aware(datetime.fromisoformat(str(row["bar_dt"])) if not isinstance(row["bar_dt"], datetime) else row["bar_dt"]): row
-            for row in frame.to_dict(orient="records")
-        }
-
-    for replay_dt in collect_replay_datetimes(bars_cache):
-        for order in sorted(
-            [item for item in working_orders if item.state == ShadowOrderState.WORKING],
-            key=shadow_order_sort_key,
-        ):
-            if replay_dt < order.activation_dt or replay_dt > order.expiry_dt:
-                continue
-            if not rules_repo.is_match_phase(replay_dt, order.instrument):
-                continue
-            row = bar_lookup.get(order.instrument.instrument_key, {}).get(replay_dt)
-            if row is None:
-                continue
-            fill_decision = simulate_limit_fill_on_bar(
-                side=order.side.value,
-                limit_price=order.limit_price,
-                bar_row=row,
-            )
-            if fill_decision is None or fill_decision.fill_price is None or fill_decision.fill_bar_dt is None:
-                continue
-            if order.side == OrderSide.BUY:
-                required_cash = (
-                    fill_decision.fill_price * Decimal(order.quantity)
-                ) + order.estimated_cost
-                if (
-                    validate_cash_available(
-                        available_cash=ledger.available_cash,
-                        required_cash=required_cash,
-                        policy="reject",
-                    )
-                    is not None
-                ):
+    tick_cache = tick_frames_by_instrument or {}
+    if config.market_replay_mode == "ticks_l1":
+        for replay_event in collect_tick_replay_events(tick_cache):
+            for order in sorted(
+                [item for item in working_orders if item.state == ShadowOrderState.WORKING],
+                key=shadow_order_sort_key,
+            ):
+                if replay_event.instrument_key != order.instrument.instrument_key:
                     continue
-            ledger_result = ledger.apply_fill(
-                instrument=order.instrument,
-                side=order.side,
-                quantity=order.quantity,
-                price=fill_decision.fill_price,
-                previous_close=order.previous_close,
-            )
-            if not ledger_result.accepted or ledger_result.cost is None:
-                continue
-            order.state = ShadowOrderState.FILLED
-            order.remaining_quantity = 0
-            paper_order_map[order.order_id] = paper_order_map[order.order_id].model_copy(
-                update={"status": PaperOrderStatus.FILLED}
-            )
-            fill_dt = ensure_cn_aware(fill_decision.fill_bar_dt)
-            trade_id = "strade_" + stable_hash(
-                {
-                    "shadow_run_id": shadow_run_id,
-                    "order_id": order.order_id,
-                    "fill_dt": fill_dt.isoformat(),
-                }
-            )[:12]
-            fill_events.append(
-                ShadowFillEventRecord(
-                    shadow_run_id=shadow_run_id,
-                    paper_run_id=paper_run_id,
-                    execution_task_id=execution_task_id,
-                    strategy_run_id=strategy_run_id,
-                    order_id=order.order_id,
-                    trade_id=trade_id,
-                    instrument_key=order.instrument.instrument_key,
-                    symbol=order.instrument.symbol,
-                    exchange=order.instrument.exchange.value,
+                if replay_event.event_dt < order.activation_dt or replay_event.event_dt > order.expiry_dt:
+                    continue
+                if not rules_repo.is_match_phase(replay_event.event_dt, order.instrument):
+                    continue
+                fill_decision = simulate_limit_fill_on_tick(
                     side=order.side.value,
-                    fill_dt=fill_dt,
-                    price=fill_decision.fill_price,
-                    quantity=order.quantity,
-                    notional=ledger_result.cost.notional,
-                    cost_breakdown_json=ledger_result.cost.model_dump(mode="json"),
-                    created_at=created_at,
-                    source_prediction_run_id=source_prediction_run_id,
-                    source_qlib_export_run_id=source_qlib_export_run_id,
-                    source_standard_build_run_id=source_standard_build_run_id,
-                )
-            )
-            order_events.append(
-                _make_order_event(
-                    shadow_run_id=shadow_run_id,
-                    paper_run_id=paper_run_id,
-                    execution_task_id=execution_task_id,
-                    strategy_run_id=strategy_run_id,
-                    order_id=order.order_id,
-                    instrument_key=order.instrument.instrument_key,
-                    symbol=order.instrument.symbol,
-                    exchange=order.instrument.exchange.value,
-                    event_dt=fill_dt,
-                    event_type=ShadowEventType.FILLED,
-                    state_before=ShadowOrderState.WORKING,
-                    state_after=ShadowOrderState.FILLED,
-                    quantity=order.quantity,
-                    remaining_quantity=0,
-                    reference_price=order.reference_price,
                     limit_price=order.limit_price,
-                    reason=None,
-                    created_at=created_at,
-                    source_prediction_run_id=source_prediction_run_id,
-                    source_qlib_export_run_id=source_qlib_export_run_id,
-                    source_standard_build_run_id=source_standard_build_run_id,
+                    tick_row=replay_event.row,
+                    tick_price_fallback=config.tick_price_fallback,
                 )
-            )
-            paper_trade_records.append(
-                PaperTradeRecord(
+                if fill_decision is None or fill_decision.fill_price is None or fill_decision.fill_bar_dt is None:
+                    continue
+                _apply_shadow_fill(
+                    shadow_run_id=shadow_run_id,
                     paper_run_id=paper_run_id,
-                    order_id=order.order_id,
-                    trade_id=trade_id,
                     execution_task_id=execution_task_id,
                     strategy_run_id=strategy_run_id,
-                    instrument_key=order.instrument.instrument_key,
-                    symbol=order.instrument.symbol,
-                    exchange=order.instrument.exchange.value,
-                    side=order.side.value,
-                    quantity=order.quantity,
-                    price=fill_decision.fill_price,
-                    notional=ledger_result.cost.notional,
-                    cost_breakdown_json=ledger_result.cost.model_dump(mode="json"),
-                    fill_bar_dt=fill_dt,
+                    order=order,
+                    fill_dt=fill_decision.fill_bar_dt,
+                    fill_price=fill_decision.fill_price,
+                    ledger=ledger,
+                    paper_order_map=paper_order_map,
+                    fill_events=fill_events,
+                    order_events=order_events,
+                    paper_trade_records=paper_trade_records,
                     created_at=created_at,
                     source_prediction_run_id=source_prediction_run_id,
                     source_qlib_export_run_id=source_qlib_export_run_id,
                     source_standard_build_run_id=source_standard_build_run_id,
                 )
+    else:
+        for order in working_orders:
+            if order.instrument.instrument_key in bars_cache:
+                continue
+            frame = load_bars_for_order(
+                project_root=project_root,
+                trade_date=trade_date,
+                exchange=order.instrument.exchange.value,
+                symbol=order.instrument.symbol,
+                source_standard_build_run_id=source_standard_build_run_id,
             )
+            bars_cache[order.instrument.instrument_key] = frame
+            bar_lookup[order.instrument.instrument_key] = {
+                ensure_cn_aware(
+                    datetime.fromisoformat(str(row["bar_dt"]))
+                    if not isinstance(row["bar_dt"], datetime)
+                    else row["bar_dt"]
+                ): row
+                for row in frame.to_dict(orient="records")
+            }
+
+        for replay_dt in collect_replay_datetimes(bars_cache):
+            for order in sorted(
+                [item for item in working_orders if item.state == ShadowOrderState.WORKING],
+                key=shadow_order_sort_key,
+            ):
+                if replay_dt < order.activation_dt or replay_dt > order.expiry_dt:
+                    continue
+                if not rules_repo.is_match_phase(replay_dt, order.instrument):
+                    continue
+                row = bar_lookup.get(order.instrument.instrument_key, {}).get(replay_dt)
+                if row is None:
+                    continue
+                fill_decision = simulate_limit_fill_on_bar(
+                    side=order.side.value,
+                    limit_price=order.limit_price,
+                    bar_row=row,
+                )
+                if fill_decision is None or fill_decision.fill_price is None or fill_decision.fill_bar_dt is None:
+                    continue
+                _apply_shadow_fill(
+                    shadow_run_id=shadow_run_id,
+                    paper_run_id=paper_run_id,
+                    execution_task_id=execution_task_id,
+                    strategy_run_id=strategy_run_id,
+                    order=order,
+                    fill_dt=fill_decision.fill_bar_dt,
+                    fill_price=fill_decision.fill_price,
+                    ledger=ledger,
+                    paper_order_map=paper_order_map,
+                    fill_events=fill_events,
+                    order_events=order_events,
+                    paper_trade_records=paper_trade_records,
+                    created_at=created_at,
+                    source_prediction_run_id=source_prediction_run_id,
+                    source_qlib_export_run_id=source_qlib_export_run_id,
+                    source_standard_build_run_id=source_standard_build_run_id,
+                )
 
     for order in sorted(
         [item for item in working_orders if item.state == ShadowOrderState.WORKING],
@@ -492,6 +455,7 @@ def run_shadow_engine(
 
     market_prices = _final_market_prices(
         bars_cache=bars_cache,
+        tick_cache=tick_cache,
         positions=ledger.positions,
         market_snapshots=market_snapshots,
     )
@@ -605,6 +569,131 @@ def _initialize_shadow_order(
     return order_id, paper_order
 
 
+def _apply_shadow_fill(
+    *,
+    shadow_run_id: str,
+    paper_run_id: str,
+    execution_task_id: str,
+    strategy_run_id: str,
+    order: ShadowWorkingOrder,
+    fill_dt: datetime,
+    fill_price: Decimal,
+    ledger: PaperLedger,
+    paper_order_map: dict[str, PaperOrderRecord],
+    fill_events: list[ShadowFillEventRecord],
+    order_events: list[ShadowOrderStateEventRecord],
+    paper_trade_records: list[PaperTradeRecord],
+    created_at: datetime,
+    source_prediction_run_id: str,
+    source_qlib_export_run_id: str | None,
+    source_standard_build_run_id: str | None,
+) -> bool:
+    if order.side == OrderSide.BUY:
+        required_cash = (fill_price * Decimal(order.quantity)) + order.estimated_cost
+        if (
+            validate_cash_available(
+                available_cash=ledger.available_cash,
+                required_cash=required_cash,
+                policy="reject",
+            )
+            is not None
+        ):
+            return False
+    ledger_result = ledger.apply_fill(
+        instrument=order.instrument,
+        side=order.side,
+        quantity=order.quantity,
+        price=fill_price,
+        previous_close=order.previous_close,
+    )
+    if not ledger_result.accepted or ledger_result.cost is None:
+        return False
+    order.state = ShadowOrderState.FILLED
+    order.remaining_quantity = 0
+    paper_order_map[order.order_id] = paper_order_map[order.order_id].model_copy(
+        update={"status": PaperOrderStatus.FILLED}
+    )
+    resolved_fill_dt = ensure_cn_aware(fill_dt)
+    trade_id = "strade_" + stable_hash(
+        {
+            "shadow_run_id": shadow_run_id,
+            "order_id": order.order_id,
+            "fill_dt": resolved_fill_dt.isoformat(),
+        }
+    )[:12]
+    fill_events.append(
+        ShadowFillEventRecord(
+            shadow_run_id=shadow_run_id,
+            paper_run_id=paper_run_id,
+            execution_task_id=execution_task_id,
+            strategy_run_id=strategy_run_id,
+            order_id=order.order_id,
+            trade_id=trade_id,
+            instrument_key=order.instrument.instrument_key,
+            symbol=order.instrument.symbol,
+            exchange=order.instrument.exchange.value,
+            side=order.side.value,
+            fill_dt=resolved_fill_dt,
+            price=fill_price,
+            quantity=order.quantity,
+            notional=ledger_result.cost.notional,
+            cost_breakdown_json=ledger_result.cost.model_dump(mode="json"),
+            created_at=created_at,
+            source_prediction_run_id=source_prediction_run_id,
+            source_qlib_export_run_id=source_qlib_export_run_id,
+            source_standard_build_run_id=source_standard_build_run_id,
+        )
+    )
+    order_events.append(
+        _make_order_event(
+            shadow_run_id=shadow_run_id,
+            paper_run_id=paper_run_id,
+            execution_task_id=execution_task_id,
+            strategy_run_id=strategy_run_id,
+            order_id=order.order_id,
+            instrument_key=order.instrument.instrument_key,
+            symbol=order.instrument.symbol,
+            exchange=order.instrument.exchange.value,
+            event_dt=resolved_fill_dt,
+            event_type=ShadowEventType.FILLED,
+            state_before=ShadowOrderState.WORKING,
+            state_after=ShadowOrderState.FILLED,
+            quantity=order.quantity,
+            remaining_quantity=0,
+            reference_price=order.reference_price,
+            limit_price=order.limit_price,
+            reason=None,
+            created_at=created_at,
+            source_prediction_run_id=source_prediction_run_id,
+            source_qlib_export_run_id=source_qlib_export_run_id,
+            source_standard_build_run_id=source_standard_build_run_id,
+        )
+    )
+    paper_trade_records.append(
+        PaperTradeRecord(
+            paper_run_id=paper_run_id,
+            order_id=order.order_id,
+            trade_id=trade_id,
+            execution_task_id=execution_task_id,
+            strategy_run_id=strategy_run_id,
+            instrument_key=order.instrument.instrument_key,
+            symbol=order.instrument.symbol,
+            exchange=order.instrument.exchange.value,
+            side=order.side.value,
+            quantity=order.quantity,
+            price=fill_price,
+            notional=ledger_result.cost.notional,
+            cost_breakdown_json=ledger_result.cost.model_dump(mode="json"),
+            fill_bar_dt=resolved_fill_dt,
+            created_at=created_at,
+            source_prediction_run_id=source_prediction_run_id,
+            source_qlib_export_run_id=source_qlib_export_run_id,
+            source_standard_build_run_id=source_standard_build_run_id,
+        )
+    )
+    return True
+
+
 def _make_order_event(
     *,
     shadow_run_id: str,
@@ -657,6 +746,7 @@ def _make_order_event(
 def _final_market_prices(
     *,
     bars_cache: dict[str, Any],
+    tick_cache: dict[str, Any],
     positions: dict[str, Any],
     market_snapshots: dict[str, MarketSnapshot],
 ) -> dict[str, Decimal]:
@@ -666,6 +756,11 @@ def _final_market_prices(
         if frame is not None and not frame.empty:
             last_row = frame.sort_values("bar_dt").iloc[-1]
             market_prices[instrument_key] = Decimal(str(last_row["close"]))
+            continue
+        tick_frame = tick_cache.get(instrument_key)
+        tick_price = last_tick_price(tick_frame)
+        if tick_price is not None:
+            market_prices[instrument_key] = tick_price
             continue
         snapshot = market_snapshots.get(instrument_key)
         if snapshot is not None:

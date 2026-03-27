@@ -19,6 +19,7 @@
 
 - `M7` is one-shot paper execution. It scans the available bars once and decides filled or unfilled directly.
 - `M8` is replay-driven shadow execution. Orders enter `working`, bars advance in time order, and fills or expiries happen over the session timeline.
+- `M9` extends the same shadow-session path to `ticks_l1`; see `docs/runbooks/m9_tick_replay_shadow.md` for the tick-driven variant.
 
 ## Session Lifecycle
 

@@ -1,6 +1,6 @@
 # VeighNa Quant Platform
 
-This repository implements the first eight milestones of an A-share quant platform:
+This repository implements the first nine milestones of an A-share quant platform:
 
 - `M0`: repository bootstrap and local developer tooling
 - `M1`: master data schemas, A-share rules engine, and bootstrap loader
@@ -11,10 +11,11 @@ This repository implements the first eight milestones of an A-share quant platfo
 - `M6`: file-first dry-run bridge from prediction to approved target weights, execution tasks, and order-request previews
 - `M7`: paper-only execution sandbox, deterministic fills, local ledger, and end-of-run reconcile reports
 - `M8`: replay-driven, session-aware shadow execution that reuses the paper ledger and reconcile path
+- `M9`: deterministic `ticks_l1` replay-driven shadow execution that reuses the same paper ledger and reconcile path
 
 ## Scope Freeze
 
-- Supported in `M0-M8`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, the `M7` one-shot paper execution sandbox and local ledger, and the `M8` replay-driven shadow session
+- Supported in `M0-M9`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, the `M7` one-shot paper execution sandbox and local ledger, the `M8` bar-driven replay shadow session, and the `M9` tick-driven replay shadow session
 - Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, live order placement, real order routing via `send_order`, broker sync, long-running signal service processes, multi-account scheduling, complex execution algorithms, optimizers, order-book or queue simulation, and large-scale historical backfill
 
 ## Canonical Interpreter
@@ -98,7 +99,7 @@ scripts/              local developer entrypoints and ETL/loader CLIs
 - Raw market data is append-only parquet with manifests, while standardized layers remain rebuildable from raw plus master data plus corporate actions.
 - Qlib is an optional research consumer of exported provider files and is not imported by the trade runtime startup path.
 - Research artifacts remain file-first in `data/research/`, and every prediction can be traced back to one `model_run`, one qlib export run, and one standard build run.
-- `M7/M8` paper execution remains file-first in `data/trading/` and never calls real `send_order`.
+- `M7/M8/M9` paper execution remains file-first in `data/trading/` and never calls real `send_order`.
 
 ## M5 Workflow
 
@@ -120,7 +121,7 @@ Training is idempotent by config and lineage hash. Re-running the same baseline 
 
 `scripts.build_standard_data --rebuild` means partition rebuild, not append. The target `trade_date/exchange/symbol` partition is cleared before rewriting, matching manifests are replaced, and adjustment factors are rebuilt from the deduplicated standard layer. Raw DQ time-order checks follow original ingest order; if `ingest_seq` exists it is treated as the canonical write order, otherwise parquet row order is used.
 
-See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md), and [M8 Replay-Driven Shadow Session](docs/adr/0008_m8_shadow_session.md) for the frozen implementation contracts.
+See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md), [M8 Replay-Driven Shadow Session](docs/adr/0008_m8_shadow_session.md), and [M9 Tick-Replay Shadow Session](docs/adr/0009_m9_tick_replay_shadow.md) for the frozen implementation contracts.
 
 ## M6 Workflow
 
@@ -190,3 +191,22 @@ Run the replay-driven shadow session after the M6 dry-run bridge:
 Shadow-session `previous_close` now uses one priority everywhere in the `M8` engine: current market-snapshot `previous_close` first, preview `previous_close` second. This affects validation and sellability checks in all cases, and it also affects order `limit_price` only when `configs/execution/shadow_session.yaml` sets `limit_price_source=previous_close`. Under the default `reference_price` config, limit-price behavior is unchanged.
 
 Shadow-session idempotency key is `execution_task_id + fill_model_config_hash + market_data_hash + account_state_hash + market_replay_mode`; successful runs are reused by default, failed runs can be rerun, and `--force` rebuilds the same artifact path without silent overwrite.
+
+## M9 Workflow
+
+Run the tick-driven shadow session after the same M6 dry-run bridge:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.run_shadow_session --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --market-replay-mode bars_1m
+.\.venv\Scripts\python.exe -m scripts.run_shadow_session --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --market-replay-mode ticks_l1
+.\.venv\Scripts\python.exe -m scripts.reconcile_shadow_session --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --latest
+.\.venv\Scripts\python.exe -m scripts.list_shadow_sessions
+```
+
+`M8` is bar-driven replay shadow execution. `M9` extends the same shadow-session path to `ticks_l1`. It remains paper-only, deterministic, file-first, and still finalizes into the `M7` paper ledger and reconcile artifacts instead of calling real `send_order`.
+
+`scripts.run_shadow_session` now supports `--market-replay-mode bars_1m|ticks_l1` and `--tick-input-path <path>`. When `ticks_l1` is selected, the tick source resolution order is explicit `--tick-input-path`, then the checked-in deterministic bootstrap sample under `data/bootstrap/shadow_tick_sample/`, then any matching raw `market_ticks` parquet partitions. Tick idempotency adds `tick_source_hash` on top of the existing `market_replay_mode` and market/account hashes, so same-path-but-different-content tick inputs do not reuse an old shadow run.
+
+`scripts.reconcile_shadow_session` now defaults to the newest shadow run inside the current `trade_date + account_id + basket_id` filter, which makes the bare command work after both `bars_1m` and `ticks_l1` runs exist. Use `--shadow-run-id` for exact inspection or `--execution-task-id` to narrow the scope first.
+
+Tick fills remain deterministic and session-aware. Buy orders fill on the first valid-session tick where `ask_price_1 <= limit_price`, using `ask_price_1` as fill price. Sell orders fill on the first valid-session tick where `bid_price_1 >= limit_price`, using `bid_price_1` as fill price. If `ask_price_1` or `bid_price_1` is missing, the engine falls back to `last_price` when the config keeps `tick_price_fallback=last_price`. Lunch-break and non-session ticks never fill orders, and orders that never cross still expire at session end.
