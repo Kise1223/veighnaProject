@@ -23,4 +23,5 @@ data/dq_reports/
 data/manifests/
 data/research/
 data/trading/
+data/analytics/
 data/bootstrap/research_sample/sample_manifest.json

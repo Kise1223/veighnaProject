@@ -1,6 +1,6 @@
 # VeighNa Quant Platform
 
-This repository implements the first ten milestones of an A-share quant platform:
+This repository implements the first eleven milestones of an A-share quant platform:
 
 - `M0`: repository bootstrap and local developer tooling
 - `M1`: master data schemas, A-share rules engine, and bootstrap loader
@@ -13,10 +13,11 @@ This repository implements the first ten milestones of an A-share quant platform
 - `M8`: replay-driven, session-aware shadow execution that reuses the paper ledger and reconcile path
 - `M9`: deterministic `ticks_l1` replay-driven shadow execution that reuses the same paper ledger and reconcile path
 - `M10`: deterministic `ticks_l1` replay-driven shadow execution with L1 top-of-book volume caps, partial fills, and simple `DAY/IOC` semantics
+- `M11`: file-first execution analytics / TCA over `M7-M10` paper and shadow artifacts, including cross-run comparison
 
 ## Scope Freeze
 
-- Supported in `M0-M10`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, the `M7` one-shot paper execution sandbox and local ledger, the `M8` bar-driven replay shadow session, the `M9` tick-driven replay shadow session, and the `M10` L1 top-of-book constrained partial-fill shadow session
+- Supported in `M0-M11`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, the `M7` one-shot paper execution sandbox and local ledger, the `M8` bar-driven replay shadow session, the `M9` tick-driven replay shadow session, the `M10` L1 top-of-book constrained partial-fill shadow session, and the `M11` execution analytics / TCA layer for `M7-M10` artifacts
 - Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, live order placement, real order routing via `send_order`, broker sync, long-running signal service processes, multi-account scheduling, optimizers, queue position simulation, full order-book simulation, stochastic fill models, and large-scale historical backfill
 
 ## Canonical Interpreter
@@ -78,6 +79,7 @@ libs/marketdata/      M4 recorder, ETL, DQ, adjustment, and qlib export helpers
 libs/research/        M5 research artifact schemas, lineage, and file-first storage
 libs/planning/        M6 target-weight, rebalance, and dry-run bridge helpers
 libs/execution/       M7 paper execution, M8 shadow session, fill model, local ledger, and reconcile helpers
+libs/analytics/       M11 execution analytics, TCA, cross-run comparison, and lineage helpers
 libs/schemas/         pydantic schemas and canonical identifiers
 libs/rules_engine/    A-share rule snapshots, phases, validation, and costs
 infra/sql/postgres/   bootstrap SQL and schema definitions
@@ -101,6 +103,7 @@ scripts/              local developer entrypoints and ETL/loader CLIs
 - Qlib is an optional research consumer of exported provider files and is not imported by the trade runtime startup path.
 - Research artifacts remain file-first in `data/research/`, and every prediction can be traced back to one `model_run`, one qlib export run, and one standard build run.
 - `M7/M8/M9/M10` paper execution remains file-first in `data/trading/` and never calls real `send_order`.
+- `M11` execution analytics remains file-first in `data/analytics/` and only analyzes existing `M7-M10` artifacts; it does not rerun execution or route orders.
 
 ## M5 Workflow
 
@@ -122,7 +125,7 @@ Training is idempotent by config and lineage hash. Re-running the same baseline 
 
 `scripts.build_standard_data --rebuild` means partition rebuild, not append. The target `trade_date/exchange/symbol` partition is cleared before rewriting, matching manifests are replaced, and adjustment factors are rebuilt from the deduplicated standard layer. Raw DQ time-order checks follow original ingest order; if `ingest_seq` exists it is treated as the canonical write order, otherwise parquet row order is used.
 
-See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md), [M8 Replay-Driven Shadow Session](docs/adr/0008_m8_shadow_session.md), [M9 Tick-Replay Shadow Session](docs/adr/0009_m9_tick_replay_shadow.md), and [M10 L1 Partial-Fill Tick Shadow Session](docs/adr/0010_m10_l1_partial_fill_shadow.md) for the frozen implementation contracts.
+See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md), [M8 Replay-Driven Shadow Session](docs/adr/0008_m8_shadow_session.md), [M9 Tick-Replay Shadow Session](docs/adr/0009_m9_tick_replay_shadow.md), [M10 L1 Partial-Fill Tick Shadow Session](docs/adr/0010_m10_l1_partial_fill_shadow.md), and [M11 Execution Analytics / TCA](docs/adr/0011_m11_execution_analytics_tca.md) for the frozen implementation contracts.
 
 ## M6 Workflow
 
@@ -233,3 +236,35 @@ Under `l1_partial_fill_v1`, buy orders become eligible when `ask_price_1 <= limi
 `DAY` orders stay active across multiple valid-session ticks, can move through `working -> partially_filled -> filled`, and any remaining quantity expires at session end. `IOC` orders attempt to consume as much top-of-book volume as possible on the first eligible tick and immediately move any remainder to `expired_ioc_remaining`. Lunch-break and non-session ticks never trigger fills in either mode.
 
 M10 shadow-session idempotency extends the existing replay key with `tick_fill_model`, `time_in_force`, and `tick_source_hash` for `ticks_l1` runs. Successful runs are reused by default, failed runs can be rerun, and `--force` rebuilds the same deterministic artifact path without silent overwrite.
+
+## M11 Workflow
+
+Run single-run execution analytics / TCA on top of existing `M7-M10` artifacts:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.list_shadow_sessions
+.\.venv\Scripts\python.exe -m scripts.run_execution_tca --trade-date 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --latest
+.\.venv\Scripts\python.exe -m scripts.run_execution_tca --paper-run-id paper_25100177daec
+.\.venv\Scripts\python.exe -m scripts.run_execution_tca --shadow-run-id shadow_2d26f3ae3995
+.\.venv\Scripts\python.exe -m scripts.list_execution_analytics
+```
+
+Run cross-run comparisons across existing paper or shadow runs:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.compare_execution_runs --left-shadow-run-id shadow_2ddcbde22e19 --right-shadow-run-id shadow_b1d4e224ed39 --compare-basis bars_vs_ticks
+.\.venv\Scripts\python.exe -m scripts.compare_execution_runs --left-shadow-run-id shadow_b1d4e224ed39 --right-shadow-run-id shadow_2d26f3ae3995 --compare-basis full_vs_partial
+.\.venv\Scripts\python.exe -m scripts.compare_execution_runs --left-shadow-run-id shadow_2d26f3ae3995 --right-shadow-run-id shadow_f108131b2ef9 --compare-basis day_vs_ioc
+```
+
+`M11` is analytics-only. It reads existing `M7` paper runs and `M8/M9/M10` shadow runs, normalizes them into a common TCA input view, and writes file-first analytics artifacts under `data/analytics/`. It does not rerun execution, does not call `send_order`, and does not create a parallel execution path.
+
+Single-run TCA metrics include `requested_quantity`, `filled_quantity`, `remaining_quantity`, `fill_rate`, `partial_fill_count`, `avg_fill_price`, `planned_notional`, `filled_notional`, `estimated_cost_total`, `realized_cost_total`, `implementation_shortfall`, `first_fill_dt`, `last_fill_dt`, and `session_end_status`. The deterministic implementation shortfall definition is:
+
+- buy: `(avg_fill_price - reference_price) * filled_quantity + realized_cost_total`
+- sell: `(reference_price - avg_fill_price) * filled_quantity + realized_cost_total`
+- no fill: `0.00`
+
+`estimated_cost_total` comes from planning / preview artifacts, while `realized_cost_total` is recomputed from realized paper trades or shadow fills. Cross-run comparison works on the intersection of instruments only and records dropped/unmatched instruments in `summary_json`.
+
+For selector semantics, `scripts.run_execution_tca` accepts `--paper-run-id`, `--shadow-run-id`, or `trade_date + account_id + basket_id`. If multiple paper/shadow sources match that date/account/basket selector, the command errors unless `--latest` is passed. Analytics and compare artifacts are idempotent by source run ids plus config hash; successful runs are reused by default, failed runs can be rerun, and `--force` rebuilds the same deterministic artifact path without silent overwrite.

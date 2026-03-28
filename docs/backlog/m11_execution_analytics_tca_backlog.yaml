@@ -1,0 +1,9 @@
+milestone: M11
+title: Execution Analytics / TCA
+status: done
+acceptance:
+  - M7 paper runs and M8-M10 shadow runs can be normalized into one execution analytics view
+  - single-run TCA artifacts are generated file-first with deterministic metrics and lineage
+  - cross-run comparison supports bars_vs_ticks, full_vs_partial, day_vs_ioc, and paper_vs_shadow
+  - multiple source matches require explicit selection or --latest
+  - README, ADR, runbook, SQL DDL, and tests are updated
