@@ -127,10 +127,14 @@ def build_reconcile_report(
         (Decimal(str(trade.cost_breakdown_json["total"])) for trade in trades),
         Decimal("0"),
     ).quantize(Decimal("0.01"))
-    filled_order_ids = {trade.order_id for trade in trades}
+    filled_orders = [item for item in orders if item.status == PaperOrderStatus.FILLED]
+    filled_order_ids = {item.order_id for item in filled_orders}
     filled_order_id_list: list[str | int | float | bool | None] = []
     filled_order_id_list.extend(sorted(filled_order_ids))
     filled_order_count = len(filled_order_ids)
+    partially_filled_order_count = len(
+        [item for item in orders if item.status == PaperOrderStatus.PARTIALLY_FILLED]
+    )
     rejected_order_count = len(
         [item for item in orders if item.status == PaperOrderStatus.REJECTED]
     )
@@ -146,6 +150,7 @@ def build_reconcile_report(
         trade_date=trade_date,
         planned_order_count=len(orders),
         filled_order_count=filled_order_count,
+        partially_filled_order_count=partially_filled_order_count,
         rejected_order_count=rejected_order_count,
         unfilled_order_count=unfilled_order_count,
         planned_notional=planned_notional,
@@ -155,6 +160,7 @@ def build_reconcile_report(
         summary_json={
             "filled_trade_count": len(trades),
             "filled_order_ids": filled_order_id_list,
+            "partially_filled_order_count": partially_filled_order_count,
             "filled_ratio": round(filled_order_count / len(orders), 4) if orders else 0.0,
         },
         created_at=created_at,

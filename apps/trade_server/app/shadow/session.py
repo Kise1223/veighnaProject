@@ -57,6 +57,8 @@ def run_shadow_session(
     market_snapshot_path: Path | None = None,
     position_cost_basis_path: Path | None = None,
     market_replay_mode: str | None = None,
+    tick_fill_model: str | None = None,
+    time_in_force: str | None = None,
     tick_input_path: Path | None = None,
     force: bool = False,
 ) -> ShadowSessionResult:
@@ -92,10 +94,21 @@ def run_shadow_session(
         strategy_run_id=execution_task.strategy_run_id,
     )
     config = load_shadow_session_config(context.project_root / config_path)
+    config_updates: dict[str, object] = {}
     if market_replay_mode is not None:
-        config = config.model_copy(update={"market_replay_mode": market_replay_mode})
+        config_updates["market_replay_mode"] = market_replay_mode
+    if tick_fill_model is not None:
+        config_updates["tick_fill_model"] = tick_fill_model
+    if time_in_force is not None:
+        config_updates["time_in_force"] = time_in_force.upper()
+    if config_updates:
+        config = config.model_copy(update=config_updates)
     if config.market_replay_mode not in {"bars_1m", "ticks_l1"}:
         raise ValueError(f"unsupported market_replay_mode: {config.market_replay_mode}")
+    if config.tick_fill_model not in {"crossing_full_fill_v1", "l1_partial_fill_v1"}:
+        raise ValueError(f"unsupported tick_fill_model: {config.tick_fill_model}")
+    if config.time_in_force not in {"DAY", "IOC"}:
+        raise ValueError(f"unsupported time_in_force: {config.time_in_force}")
     payload = load_bootstrap(context.project_root / "data" / "master" / "bootstrap")
     catalog = InstrumentCatalog(payload)
     rules_repo = RulesRepository(
@@ -134,6 +147,9 @@ def run_shadow_session(
         OrderIntentPreviewRecord.model_validate(item)
         for item in preview_frame.to_dict(orient="records")
     ]
+    active_fill_model_name = (
+        config.tick_fill_model if config.market_replay_mode == "ticks_l1" else config.fill_model_name
+    )
     fill_model_config_hash = stable_hash(config.model_dump(mode="json"))
     wanted_instruments = {
         (item.instrument_key, item.symbol, item.exchange) for item in preview_records
@@ -185,6 +201,8 @@ def run_shadow_session(
             "market_data_hash": market_data_hash,
             "account_state_hash": account_state_hash,
             "market_replay_mode": config.market_replay_mode,
+            "tick_fill_model": config.tick_fill_model if config.market_replay_mode == "ticks_l1" else None,
+            "time_in_force": config.time_in_force if config.market_replay_mode == "ticks_l1" else None,
             "tick_source_hash": tick_source_hash,
         }
     )[:12]
@@ -265,7 +283,9 @@ def run_shadow_session(
         basket_id=basket_id,
         trade_date=trade_date,
         market_replay_mode=config.market_replay_mode,
-        fill_model_name=config.fill_model_name,
+        fill_model_name=active_fill_model_name,
+        tick_fill_model=(config.tick_fill_model if config.market_replay_mode == "ticks_l1" else None),
+        time_in_force=(config.time_in_force if config.market_replay_mode == "ticks_l1" else None),
         fill_model_config_hash=fill_model_config_hash,
         market_data_hash=market_data_hash,
         account_state_hash=account_state_hash,
@@ -315,7 +335,7 @@ def run_shadow_session(
             account_id=account_id,
             basket_id=basket_id,
             trade_date=trade_date,
-            fill_model_name=config.fill_model_name,
+            fill_model_name=active_fill_model_name,
             fill_model_config_hash=fill_model_config_hash,
             market_data_hash=market_data_hash,
             account_state_hash=account_state_hash,
@@ -511,19 +531,25 @@ def _build_shadow_report(
     outcome: ShadowEngineOutcome,
     created_at: datetime,
 ) -> ShadowSessionReportRecord:
-    filled_order_ids = {item.order_id for item in outcome.paper_trades}
+    filled_order_ids = {
+        item.order_id for item in outcome.paper_orders if item.status.value == "filled"
+    }
     filled_order_id_list: list[str | int | float | bool | None] = []
     filled_order_id_list.extend(sorted(filled_order_ids))
+    partially_filled_orders = [
+        item for item in outcome.paper_orders if item.status.value == "partially_filled"
+    ]
     expired_orders = [
         item
         for item in outcome.paper_orders
-        if item.status.value == "unfilled" and item.status_reason == "expired_end_of_session"
+        if item.status_reason in {"expired_end_of_session", "expired_ioc_remaining"}
     ]
     rejected_orders = [item for item in outcome.paper_orders if item.status.value == "rejected"]
     unfilled_orders = [
         item
         for item in outcome.paper_orders
-        if item.status.value == "unfilled" and item.status_reason != "expired_end_of_session"
+        if item.status.value == "unfilled"
+        and item.status_reason not in {"expired_end_of_session", "expired_ioc_remaining"}
     ]
     filled_notional = sum((item.notional for item in outcome.paper_trades), Decimal("0")).quantize(
         Decimal("0.01")
@@ -538,8 +564,11 @@ def _build_shadow_report(
     ] = {
         "paper_run_id": run.paper_run_id,
         "fill_event_count": len(outcome.fill_events),
+        "partial_fill_count": len(partially_filled_orders),
         "filled_order_ids": filled_order_id_list,
         "session_mode": run.market_replay_mode,
+        "tick_fill_model": run.tick_fill_model,
+        "time_in_force": run.time_in_force,
         "tick_source_hash": run.tick_source_hash,
     }
     return ShadowSessionReportRecord(
@@ -552,6 +581,7 @@ def _build_shadow_report(
         trade_date=run.trade_date,
         order_count=len(outcome.paper_orders),
         filled_order_count=len(filled_order_ids),
+        partially_filled_order_count=len(partially_filled_orders),
         expired_order_count=len(expired_orders),
         rejected_order_count=len(rejected_orders),
         unfilled_order_count=len(unfilled_orders),

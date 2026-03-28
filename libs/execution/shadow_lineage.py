@@ -36,6 +36,8 @@ def resolve_shadow_run_lineage(
         execution_task_id=manifest.execution_task_id,
         strategy_run_id=manifest.strategy_run_id,
         market_replay_mode=run.market_replay_mode,
+        tick_fill_model=run.tick_fill_model,
+        time_in_force=run.time_in_force,
         tick_source_hash=run.tick_source_hash,
         source_prediction_run_id=manifest.source_prediction_run_id,
         source_qlib_export_run_id=manifest.source_qlib_export_run_id,

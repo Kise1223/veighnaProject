@@ -41,6 +41,14 @@ class TickReplaySource:
     source_label: str
 
 
+@dataclass(frozen=True)
+class TickLiquidity:
+    fill_dt: datetime
+    fill_price: Decimal
+    available_quantity: int
+    used_fallback: bool
+
+
 def resolve_tick_replay_source(
     *,
     project_root: Path,
@@ -156,6 +164,61 @@ def simulate_limit_fill_on_tick(
     return None
 
 
+def resolve_tick_liquidity(
+    *,
+    side: str,
+    tick_row: dict[str, object],
+    tick_price_fallback: str,
+) -> TickLiquidity | None:
+    tick_dt = _as_datetime(tick_row["exchange_ts"])
+    last_price = _as_positive_decimal(tick_row.get("last_price"))
+    if side == "BUY":
+        best_quote = _as_positive_decimal(tick_row.get("ask_price_1"))
+        quote_volume = _as_positive_quantity(tick_row.get("ask_volume_1"))
+        if best_quote is not None and quote_volume > 0:
+            return TickLiquidity(
+                fill_dt=tick_dt,
+                fill_price=best_quote,
+                available_quantity=quote_volume,
+                used_fallback=False,
+            )
+        if (
+            best_quote is None
+            and tick_price_fallback == "last_price"
+            and last_price is not None
+            and quote_volume > 0
+        ):
+            return TickLiquidity(
+                fill_dt=tick_dt,
+                fill_price=last_price,
+                available_quantity=quote_volume,
+                used_fallback=True,
+            )
+        return None
+
+    best_quote = _as_positive_decimal(tick_row.get("bid_price_1"))
+    quote_volume = _as_positive_quantity(tick_row.get("bid_volume_1"))
+    if best_quote is not None and quote_volume > 0:
+        return TickLiquidity(
+            fill_dt=tick_dt,
+            fill_price=best_quote,
+            available_quantity=quote_volume,
+            used_fallback=False,
+        )
+    if (
+        best_quote is None
+        and tick_price_fallback == "last_price"
+        and last_price is not None
+        and quote_volume > 0
+    ):
+        return TickLiquidity(
+            fill_dt=tick_dt,
+            fill_price=last_price,
+            available_quantity=quote_volume,
+            used_fallback=True,
+        )
+    return None
+
 def last_tick_price(frame: Any) -> Decimal | None:
     if frame is None or frame.empty:
         return None
@@ -263,6 +326,8 @@ def _normalize_tick_frame(frame: Any, *, trade_date: date) -> Any:
                 "last_price",
                 "bid_price_1",
                 "ask_price_1",
+                "bid_volume_1",
+                "ask_volume_1",
                 "raw_hash",
                 "source_seq",
             ]
@@ -272,6 +337,8 @@ def _normalize_tick_frame(frame: Any, *, trade_date: date) -> Any:
         "bid_price_1",
         "ask_price_1",
         "last_price",
+        "bid_volume_1",
+        "ask_volume_1",
     ):
         if column not in normalized.columns:
             normalized[column] = None
@@ -291,6 +358,8 @@ def _normalize_tick_frame(frame: Any, *, trade_date: date) -> Any:
                     "last_price": str(row["last_price"]),
                     "bid_price_1": str(row["bid_price_1"]),
                     "ask_price_1": str(row["ask_price_1"]),
+                    "bid_volume_1": str(row["bid_volume_1"]),
+                    "ask_volume_1": str(row["ask_volume_1"]),
                 }
             ),
             axis=1,
@@ -352,3 +421,10 @@ def _as_optional_str(value: object | None) -> str | None:
         return None
     text = str(value)
     return text or None
+
+
+def _as_positive_quantity(value: object | None) -> int:
+    decimal_value = _as_optional_decimal(value)
+    if decimal_value is None or decimal_value <= 0:
+        return 0
+    return int(decimal_value)

@@ -9,7 +9,9 @@
       "received_ts": "2026-03-26T09:31:00+08:00",
       "last_price": "10.00",
       "bid_price_1": "10.00",
-      "ask_price_1": "10.00",
+      "ask_price_1": "10.01",
+      "bid_volume_1": "200",
+      "ask_volume_1": "200",
       "raw_hash": "shadow_sample_eq_sh_600000_093100"
     },
     {
@@ -21,6 +23,8 @@
       "last_price": "12.00",
       "bid_price_1": "12.00",
       "ask_price_1": "12.00",
+      "bid_volume_1": "300",
+      "ask_volume_1": "300",
       "raw_hash": "shadow_sample_eq_sz_000001_093100"
     },
     {
@@ -31,7 +35,9 @@
       "received_ts": "2026-03-26T09:31:00+08:00",
       "last_price": "2.00",
       "bid_price_1": "2.00",
-      "ask_price_1": "2.00",
+      "ask_price_1": "2.01",
+      "bid_volume_1": "100",
+      "ask_volume_1": "100",
       "raw_hash": "shadow_sample_etf_sh_510300_093100"
     },
     {
@@ -43,6 +49,8 @@
       "last_price": "10.02",
       "bid_price_1": "10.02",
       "ask_price_1": "10.03",
+      "bid_volume_1": "200",
+      "ask_volume_1": "200",
       "raw_hash": "shadow_sample_eq_sh_600000_145500"
     },
     {
@@ -54,6 +62,8 @@
       "last_price": "11.98",
       "bid_price_1": "11.98",
       "ask_price_1": "12.00",
+      "bid_volume_1": "400",
+      "ask_volume_1": "400",
       "raw_hash": "shadow_sample_eq_sz_000001_145500"
     },
     {
@@ -65,6 +75,8 @@
       "last_price": "2.01",
       "bid_price_1": "2.01",
       "ask_price_1": "2.01",
+      "bid_volume_1": "200",
+      "ask_volume_1": "200",
       "raw_hash": "shadow_sample_etf_sh_510300_145500"
     }
   ]

@@ -1,0 +1,9 @@
+milestone: M10
+title: L1 Partial-Fill Tick Shadow Session
+status: done
+acceptance:
+  - ticks_l1 shadow session supports crossing_full_fill_v1 and l1_partial_fill_v1
+  - partial fills are constrained by L1 top-of-book volume and allocated FIFO
+  - DAY and IOC semantics are implemented deterministically
+  - M7-compatible ledger and reconcile outputs still work
+  - README, ADR, runbook, SQL DDL, and tests are updated

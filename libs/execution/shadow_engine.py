@@ -36,14 +36,18 @@ from libs.execution.shadow_schemas import (
     ShadowOrderStateEventRecord,
     ShadowSessionConfig,
 )
-from libs.execution.shadow_state import ShadowWorkingOrder, shadow_order_sort_key
+from libs.execution.shadow_state import (
+    ShadowWorkingOrder,
+    shadow_order_fifo_key,
+    shadow_order_sort_key,
+)
 from libs.execution.tick_replay import (
     collect_tick_replay_events,
     last_tick_price,
+    resolve_tick_liquidity,
     simulate_limit_fill_on_tick,
 )
 from libs.execution.validation import (
-    validate_cash_available,
     validate_sellable_quantity,
     validate_static_order_inputs,
 )
@@ -281,16 +285,20 @@ def run_shadow_engine(
             side=OrderSide(preview.side),
             quantity=abs(preview.delta_quantity),
             remaining_quantity=abs(preview.delta_quantity),
+            filled_quantity=0,
             reference_price=_required_decimal(preview.reference_price),
             limit_price=_required_decimal(paper_order.limit_price),
             previous_close=previous_close,
             estimated_cost=preview.estimated_cost,
+            cumulative_notional=Decimal("0"),
             activation_dt=activation_dt,
             expiry_dt=expiry_dt,
             state=ShadowOrderState.WORKING,
             status_reason=None,
             source_order_intent_hash=paper_order.source_order_intent_hash,
             created_at=preview_created_at,
+            creation_seq=index,
+            last_fill_dt=None,
             source_prediction_run_id=source_prediction_run_id,
             source_qlib_export_run_id=source_qlib_export_run_id,
             source_standard_build_run_id=source_standard_build_run_id,
@@ -328,32 +336,81 @@ def run_shadow_engine(
     tick_cache = tick_frames_by_instrument or {}
     if config.market_replay_mode == "ticks_l1":
         for replay_event in collect_tick_replay_events(tick_cache):
-            for order in sorted(
-                [item for item in working_orders if item.state == ShadowOrderState.WORKING],
-                key=shadow_order_sort_key,
-            ):
-                if replay_event.instrument_key != order.instrument.instrument_key:
-                    continue
-                if replay_event.event_dt < order.activation_dt or replay_event.event_dt > order.expiry_dt:
-                    continue
-                if not rules_repo.is_match_phase(replay_event.event_dt, order.instrument):
-                    continue
-                fill_decision = simulate_limit_fill_on_tick(
-                    side=order.side.value,
-                    limit_price=order.limit_price,
-                    tick_row=replay_event.row,
-                    tick_price_fallback=config.tick_price_fallback,
-                )
-                if fill_decision is None or fill_decision.fill_price is None or fill_decision.fill_bar_dt is None:
-                    continue
-                _apply_shadow_fill(
+            replay_orders = [
+                item
+                for item in working_orders
+                if _is_order_active(item)
+                and replay_event.instrument_key == item.instrument.instrument_key
+                and item.activation_dt <= replay_event.event_dt <= item.expiry_dt
+                and rules_repo.is_match_phase(replay_event.event_dt, item.instrument)
+            ]
+            if not replay_orders:
+                continue
+            if config.tick_fill_model == "crossing_full_fill_v1":
+                for order in sorted(replay_orders, key=shadow_order_sort_key):
+                    fill_decision = simulate_limit_fill_on_tick(
+                        side=order.side.value,
+                        limit_price=order.limit_price,
+                        tick_row=replay_event.row,
+                        tick_price_fallback=config.tick_price_fallback,
+                    )
+                    if (
+                        fill_decision is None
+                        or fill_decision.fill_price is None
+                        or fill_decision.fill_bar_dt is None
+                    ):
+                        continue
+                    filled = _apply_shadow_fill(
+                        shadow_run_id=shadow_run_id,
+                        paper_run_id=paper_run_id,
+                        execution_task_id=execution_task_id,
+                        strategy_run_id=strategy_run_id,
+                        order=order,
+                        fill_dt=fill_decision.fill_bar_dt,
+                        fill_price=fill_decision.fill_price,
+                        fill_quantity=order.remaining_quantity,
+                        ledger=ledger,
+                        paper_order_map=paper_order_map,
+                        fill_events=fill_events,
+                        order_events=order_events,
+                        paper_trade_records=paper_trade_records,
+                        created_at=created_at,
+                        source_prediction_run_id=source_prediction_run_id,
+                        source_qlib_export_run_id=source_qlib_export_run_id,
+                        source_standard_build_run_id=source_standard_build_run_id,
+                    )
+                    if (
+                        config.time_in_force == "IOC"
+                        and fill_decision.fill_bar_dt is not None
+                        and order.remaining_quantity > 0
+                    ):
+                        _expire_shadow_order(
+                            shadow_run_id=shadow_run_id,
+                            paper_run_id=paper_run_id,
+                            execution_task_id=execution_task_id,
+                            strategy_run_id=strategy_run_id,
+                            order=order,
+                            event_dt=fill_decision.fill_bar_dt,
+                            paper_order_map=paper_order_map,
+                            order_events=order_events,
+                            created_at=created_at,
+                            reason="expired_ioc_remaining",
+                            state_after=ShadowOrderState.EXPIRED_IOC_REMAINING,
+                            source_prediction_run_id=source_prediction_run_id,
+                            source_qlib_export_run_id=source_qlib_export_run_id,
+                            source_standard_build_run_id=source_standard_build_run_id,
+                        )
+                    if not filled:
+                        continue
+            else:
+                _process_tick_partial_fill_event(
                     shadow_run_id=shadow_run_id,
                     paper_run_id=paper_run_id,
                     execution_task_id=execution_task_id,
                     strategy_run_id=strategy_run_id,
-                    order=order,
-                    fill_dt=fill_decision.fill_bar_dt,
-                    fill_price=fill_decision.fill_price,
+                    replay_event=replay_event,
+                    working_orders=replay_orders,
+                    config=config,
                     ledger=ledger,
                     paper_order_map=paper_order_map,
                     fill_events=fill_events,
@@ -387,7 +444,7 @@ def run_shadow_engine(
 
         for replay_dt in collect_replay_datetimes(bars_cache):
             for order in sorted(
-                [item for item in working_orders if item.state == ShadowOrderState.WORKING],
+                [item for item in working_orders if _is_order_active(item)],
                 key=shadow_order_sort_key,
             ):
                 if replay_dt < order.activation_dt or replay_dt > order.expiry_dt:
@@ -412,6 +469,7 @@ def run_shadow_engine(
                     order=order,
                     fill_dt=fill_decision.fill_bar_dt,
                     fill_price=fill_decision.fill_price,
+                    fill_quantity=order.remaining_quantity,
                     ledger=ledger,
                     paper_order_map=paper_order_map,
                     fill_events=fill_events,
@@ -423,41 +481,22 @@ def run_shadow_engine(
                     source_standard_build_run_id=source_standard_build_run_id,
                 )
 
-    for order in sorted(
-        [item for item in working_orders if item.state == ShadowOrderState.WORKING],
-        key=shadow_order_sort_key,
-    ):
-        order.state = ShadowOrderState.EXPIRED_END_OF_SESSION
-        paper_order_map[order.order_id] = paper_order_map[order.order_id].model_copy(
-            update={
-                "status": PaperOrderStatus.UNFILLED,
-                "status_reason": "expired_end_of_session",
-            }
-        )
-        order_events.append(
-            _make_order_event(
-                shadow_run_id=shadow_run_id,
-                paper_run_id=paper_run_id,
-                execution_task_id=execution_task_id,
-                strategy_run_id=strategy_run_id,
-                order_id=order.order_id,
-                instrument_key=order.instrument.instrument_key,
-                symbol=order.instrument.symbol,
-                exchange=order.instrument.exchange.value,
-                event_dt=order.expiry_dt,
-                event_type=ShadowEventType.EXPIRED_END_OF_SESSION,
-                state_before=ShadowOrderState.WORKING,
-                state_after=ShadowOrderState.EXPIRED_END_OF_SESSION,
-                quantity=order.quantity,
-                remaining_quantity=order.remaining_quantity,
-                reference_price=order.reference_price,
-                limit_price=order.limit_price,
-                reason="expired_end_of_session",
-                created_at=created_at,
-                source_prediction_run_id=source_prediction_run_id,
-                source_qlib_export_run_id=source_qlib_export_run_id,
-                source_standard_build_run_id=source_standard_build_run_id,
-            )
+    for order in sorted([item for item in working_orders if _is_order_active(item)], key=shadow_order_sort_key):
+        _expire_shadow_order(
+            shadow_run_id=shadow_run_id,
+            paper_run_id=paper_run_id,
+            execution_task_id=execution_task_id,
+            strategy_run_id=strategy_run_id,
+            order=order,
+            event_dt=order.expiry_dt,
+            paper_order_map=paper_order_map,
+            order_events=order_events,
+            created_at=created_at,
+            reason="expired_end_of_session",
+            state_after=ShadowOrderState.EXPIRED_END_OF_SESSION,
+            source_prediction_run_id=source_prediction_run_id,
+            source_qlib_export_run_id=source_qlib_export_run_id,
+            source_standard_build_run_id=source_standard_build_run_id,
         )
 
     market_prices = _final_market_prices(
@@ -575,6 +614,7 @@ def _apply_shadow_fill(
     order: ShadowWorkingOrder,
     fill_dt: datetime,
     fill_price: Decimal,
+    fill_quantity: int,
     ledger: PaperLedger,
     paper_order_map: dict[str, PaperOrderRecord],
     fill_events: list[ShadowFillEventRecord],
@@ -585,37 +625,42 @@ def _apply_shadow_fill(
     source_qlib_export_run_id: str | None,
     source_standard_build_run_id: str | None,
 ) -> bool:
-    if order.side == OrderSide.BUY:
-        required_cash = (fill_price * Decimal(order.quantity)) + order.estimated_cost
-        if (
-            validate_cash_available(
-                available_cash=ledger.available_cash,
-                required_cash=required_cash,
-                policy="reject",
-            )
-            is not None
-        ):
-            return False
+    if fill_quantity <= 0:
+        return False
     ledger_result = ledger.apply_fill(
         instrument=order.instrument,
         side=order.side,
-        quantity=order.quantity,
+        quantity=fill_quantity,
         price=fill_price,
         previous_close=order.previous_close,
     )
     if not ledger_result.accepted or ledger_result.cost is None:
         return False
-    order.state = ShadowOrderState.FILLED
-    order.remaining_quantity = 0
-    paper_order_map[order.order_id] = paper_order_map[order.order_id].model_copy(
-        update={"status": PaperOrderStatus.FILLED}
-    )
+    state_before = order.state
+    order.filled_quantity += fill_quantity
+    order.remaining_quantity -= fill_quantity
+    order.cumulative_notional += ledger_result.cost.notional
     resolved_fill_dt = ensure_cn_aware(fill_dt)
+    order.last_fill_dt = resolved_fill_dt
+    is_complete = order.remaining_quantity == 0
+    order.state = ShadowOrderState.FILLED if is_complete else ShadowOrderState.PARTIALLY_FILLED
+    paper_order_map[order.order_id] = paper_order_map[order.order_id].model_copy(
+        update={
+            "status": (
+                PaperOrderStatus.FILLED
+                if is_complete
+                else PaperOrderStatus.PARTIALLY_FILLED
+            ),
+            "status_reason": None,
+        }
+    )
     trade_id = "strade_" + stable_hash(
         {
             "shadow_run_id": shadow_run_id,
             "order_id": order.order_id,
             "fill_dt": resolved_fill_dt.isoformat(),
+            "filled_quantity_before": order.filled_quantity - fill_quantity,
+            "fill_quantity": fill_quantity,
         }
     )[:12]
     fill_events.append(
@@ -632,7 +677,7 @@ def _apply_shadow_fill(
             side=order.side.value,
             fill_dt=resolved_fill_dt,
             price=fill_price,
-            quantity=order.quantity,
+            quantity=fill_quantity,
             notional=ledger_result.cost.notional,
             cost_breakdown_json=ledger_result.cost.model_dump(mode="json"),
             created_at=created_at,
@@ -652,11 +697,15 @@ def _apply_shadow_fill(
             symbol=order.instrument.symbol,
             exchange=order.instrument.exchange.value,
             event_dt=resolved_fill_dt,
-            event_type=ShadowEventType.FILLED,
-            state_before=ShadowOrderState.WORKING,
-            state_after=ShadowOrderState.FILLED,
+            event_type=(
+                ShadowEventType.FILLED
+                if is_complete
+                else ShadowEventType.PARTIALLY_FILLED
+            ),
+            state_before=state_before,
+            state_after=order.state,
             quantity=order.quantity,
-            remaining_quantity=0,
+            remaining_quantity=order.remaining_quantity,
             reference_price=order.reference_price,
             limit_price=order.limit_price,
             reason=None,
@@ -677,7 +726,7 @@ def _apply_shadow_fill(
             symbol=order.instrument.symbol,
             exchange=order.instrument.exchange.value,
             side=order.side.value,
-            quantity=order.quantity,
+            quantity=fill_quantity,
             price=fill_price,
             notional=ledger_result.cost.notional,
             cost_breakdown_json=ledger_result.cost.model_dump(mode="json"),
@@ -689,6 +738,154 @@ def _apply_shadow_fill(
         )
     )
     return True
+
+
+def _process_tick_partial_fill_event(
+    *,
+    shadow_run_id: str,
+    paper_run_id: str,
+    execution_task_id: str,
+    strategy_run_id: str,
+    replay_event: Any,
+    working_orders: list[ShadowWorkingOrder],
+    config: ShadowSessionConfig,
+    ledger: PaperLedger,
+    paper_order_map: dict[str, PaperOrderRecord],
+    fill_events: list[ShadowFillEventRecord],
+    order_events: list[ShadowOrderStateEventRecord],
+    paper_trade_records: list[PaperTradeRecord],
+    created_at: datetime,
+    source_prediction_run_id: str,
+    source_qlib_export_run_id: str | None,
+    source_standard_build_run_id: str | None,
+) -> None:
+    for side in _execution_sides(config.execution_order):
+        side_orders = sorted(
+            [item for item in working_orders if _is_order_active(item) and item.side.value == side],
+            key=shadow_order_fifo_key,
+        )
+        if not side_orders:
+            continue
+        liquidity = resolve_tick_liquidity(
+            side=side,
+            tick_row=replay_event.row,
+            tick_price_fallback=config.tick_price_fallback,
+        )
+        if liquidity is None:
+            continue
+        available_quantity = liquidity.available_quantity
+        for order in side_orders:
+            if not _tick_price_crosses(
+                side=order.side.value,
+                limit_price=order.limit_price,
+                liquidity_price=liquidity.fill_price,
+            ):
+                continue
+            fill_quantity = min(order.remaining_quantity, available_quantity)
+            if fill_quantity > 0:
+                filled = _apply_shadow_fill(
+                    shadow_run_id=shadow_run_id,
+                    paper_run_id=paper_run_id,
+                    execution_task_id=execution_task_id,
+                    strategy_run_id=strategy_run_id,
+                    order=order,
+                    fill_dt=liquidity.fill_dt,
+                    fill_price=liquidity.fill_price,
+                    fill_quantity=fill_quantity,
+                    ledger=ledger,
+                    paper_order_map=paper_order_map,
+                    fill_events=fill_events,
+                    order_events=order_events,
+                    paper_trade_records=paper_trade_records,
+                    created_at=created_at,
+                    source_prediction_run_id=source_prediction_run_id,
+                    source_qlib_export_run_id=source_qlib_export_run_id,
+                    source_standard_build_run_id=source_standard_build_run_id,
+                )
+                if filled:
+                    available_quantity -= fill_quantity
+            if config.time_in_force == "IOC" and order.remaining_quantity > 0:
+                _expire_shadow_order(
+                    shadow_run_id=shadow_run_id,
+                    paper_run_id=paper_run_id,
+                    execution_task_id=execution_task_id,
+                    strategy_run_id=strategy_run_id,
+                    order=order,
+                    event_dt=liquidity.fill_dt,
+                    paper_order_map=paper_order_map,
+                    order_events=order_events,
+                    created_at=created_at,
+                    reason="expired_ioc_remaining",
+                    state_after=ShadowOrderState.EXPIRED_IOC_REMAINING,
+                    source_prediction_run_id=source_prediction_run_id,
+                    source_qlib_export_run_id=source_qlib_export_run_id,
+                    source_standard_build_run_id=source_standard_build_run_id,
+                )
+            if available_quantity <= 0 and config.time_in_force != "IOC":
+                break
+
+
+def _expire_shadow_order(
+    *,
+    shadow_run_id: str,
+    paper_run_id: str,
+    execution_task_id: str,
+    strategy_run_id: str,
+    order: ShadowWorkingOrder,
+    event_dt: datetime,
+    paper_order_map: dict[str, PaperOrderRecord],
+    order_events: list[ShadowOrderStateEventRecord],
+    created_at: datetime,
+    reason: str,
+    state_after: ShadowOrderState,
+    source_prediction_run_id: str,
+    source_qlib_export_run_id: str | None,
+    source_standard_build_run_id: str | None,
+) -> None:
+    state_before = order.state
+    if not _is_order_active(order):
+        return
+    order.state = state_after
+    order.status_reason = reason
+    paper_order_map[order.order_id] = paper_order_map[order.order_id].model_copy(
+        update={
+            "status": (
+                PaperOrderStatus.PARTIALLY_FILLED
+                if order.filled_quantity > 0
+                else PaperOrderStatus.UNFILLED
+            ),
+            "status_reason": reason,
+        }
+    )
+    order_events.append(
+        _make_order_event(
+            shadow_run_id=shadow_run_id,
+            paper_run_id=paper_run_id,
+            execution_task_id=execution_task_id,
+            strategy_run_id=strategy_run_id,
+            order_id=order.order_id,
+            instrument_key=order.instrument.instrument_key,
+            symbol=order.instrument.symbol,
+            exchange=order.instrument.exchange.value,
+            event_dt=event_dt,
+            event_type=(
+                ShadowEventType.EXPIRED_IOC_REMAINING
+                if state_after == ShadowOrderState.EXPIRED_IOC_REMAINING
+                else ShadowEventType.EXPIRED_END_OF_SESSION
+            ),
+            state_before=state_before,
+            state_after=state_after,
+            quantity=order.quantity,
+            remaining_quantity=order.remaining_quantity,
+            reference_price=order.reference_price,
+            limit_price=order.limit_price,
+            reason=reason,
+            created_at=created_at,
+            source_prediction_run_id=source_prediction_run_id,
+            source_qlib_export_run_id=source_qlib_export_run_id,
+            source_standard_build_run_id=source_standard_build_run_id,
+        )
+    )
 
 
 def _make_order_event(
@@ -841,6 +1038,22 @@ def _required_decimal(value: Decimal | None) -> Decimal:
     if value is None:
         raise ValueError("expected decimal value for shadow session")
     return value
+
+
+def _is_order_active(order: ShadowWorkingOrder) -> bool:
+    return order.state in {ShadowOrderState.WORKING, ShadowOrderState.PARTIALLY_FILLED}
+
+
+def _execution_sides(execution_order: str) -> tuple[str, str]:
+    if execution_order == "sell_then_buy":
+        return ("SELL", "BUY")
+    return ("BUY", "SELL")
+
+
+def _tick_price_crosses(*, side: str, limit_price: Decimal, liquidity_price: Decimal) -> bool:
+    if side == "BUY":
+        return liquidity_price <= limit_price
+    return liquidity_price >= limit_price
 
 
 def _resolve_previous_close(

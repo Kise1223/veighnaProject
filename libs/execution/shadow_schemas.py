@@ -20,7 +20,9 @@ class ShadowRunStatus(StrEnum):
 class ShadowOrderState(StrEnum):
     CREATED = "created"
     WORKING = "working"
+    PARTIALLY_FILLED = "partially_filled"
     FILLED = "filled"
+    EXPIRED_IOC_REMAINING = "expired_ioc_remaining"
     EXPIRED_END_OF_SESSION = "expired_end_of_session"
     REJECTED_VALIDATION = "rejected_validation"
 
@@ -28,7 +30,9 @@ class ShadowOrderState(StrEnum):
 class ShadowEventType(StrEnum):
     CREATED = "created"
     WORKING = "working"
+    PARTIALLY_FILLED = "partially_filled"
     FILLED = "filled"
+    EXPIRED_IOC_REMAINING = "expired_ioc_remaining"
     EXPIRED_END_OF_SESSION = "expired_end_of_session"
     REJECTED_VALIDATION = "rejected_validation"
 
@@ -36,6 +40,8 @@ class ShadowEventType(StrEnum):
 class ShadowSessionConfig(BaseModel):
     market_replay_mode: str = Field(default="bars_1m", min_length=1)
     fill_model_name: str = Field(default="bar_limit_shadow_v1", min_length=1)
+    tick_fill_model: str = Field(default="crossing_full_fill_v1", min_length=1)
+    time_in_force: str = Field(default="DAY", min_length=1)
     order_type: str = Field(default="LIMIT", min_length=1)
     limit_price_source: str = Field(default="reference_price", min_length=1)
     fill_price_rule: str = Field(default="limit_price", min_length=1)
@@ -60,6 +66,8 @@ class ShadowSessionRunRecord(BaseModel):
     trade_date: date
     market_replay_mode: str = Field(min_length=1)
     fill_model_name: str = Field(min_length=1)
+    tick_fill_model: str | None = None
+    time_in_force: str | None = None
     fill_model_config_hash: str = Field(min_length=1)
     market_data_hash: str = Field(min_length=1)
     account_state_hash: str = Field(min_length=1)
@@ -88,6 +96,8 @@ class ShadowSessionManifest(BaseModel):
     started_at: datetime | None = None
     ended_at: datetime | None = None
     market_replay_mode: str | None = None
+    tick_fill_model: str | None = None
+    time_in_force: str | None = None
     tick_source_hash: str | None = None
     run_file_path: str = Field(min_length=1)
     run_file_hash: str = Field(min_length=1)
@@ -97,6 +107,7 @@ class ShadowSessionManifest(BaseModel):
     fill_events_file_path: str | None = None
     fill_events_file_hash: str | None = None
     fill_events_count: int = Field(default=0, ge=0)
+    partial_fill_count: int = Field(default=0, ge=0)
     report_file_path: str | None = None
     report_file_hash: str | None = None
     paper_report_file_path: str | None = None
@@ -169,6 +180,7 @@ class ShadowSessionReportRecord(BaseModel):
     trade_date: date
     order_count: int = Field(ge=0)
     filled_order_count: int = Field(ge=0)
+    partially_filled_order_count: int = Field(default=0, ge=0)
     expired_order_count: int = Field(ge=0)
     rejected_order_count: int = Field(ge=0)
     unfilled_order_count: int = Field(ge=0)
@@ -189,6 +201,8 @@ class ShadowSessionLineage(BaseModel):
     execution_task_id: str = Field(min_length=1)
     strategy_run_id: str = Field(min_length=1)
     market_replay_mode: str | None = None
+    tick_fill_model: str | None = None
+    time_in_force: str | None = None
     tick_source_hash: str | None = None
     source_prediction_run_id: str = Field(min_length=1)
     source_qlib_export_run_id: str | None = None

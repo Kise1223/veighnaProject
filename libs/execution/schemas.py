@@ -19,6 +19,7 @@ class PaperRunStatus(StrEnum):
 
 class PaperOrderStatus(StrEnum):
     CREATED = "created"
+    PARTIALLY_FILLED = "partially_filled"
     FILLED = "filled"
     UNFILLED = "unfilled"
     REJECTED = "rejected"
@@ -194,6 +195,7 @@ class PaperReconcileReportRecord(BaseModel):
     trade_date: date
     planned_order_count: int = Field(ge=0)
     filled_order_count: int = Field(ge=0)
+    partially_filled_order_count: int = Field(default=0, ge=0)
     rejected_order_count: int = Field(ge=0)
     unfilled_order_count: int = Field(ge=0)
     planned_notional: Decimal = Field(ge=Decimal("0"))

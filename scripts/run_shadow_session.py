@@ -21,6 +21,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--execution-task-id")
     parser.add_argument("--config", default="configs/execution/shadow_session.yaml")
     parser.add_argument("--market-replay-mode", choices=["bars_1m", "ticks_l1"])
+    parser.add_argument("--tick-fill-model", choices=["crossing_full_fill_v1", "l1_partial_fill_v1"])
+    parser.add_argument("--time-in-force", choices=["DAY", "IOC"])
     parser.add_argument("--account-snapshot-path", type=Path)
     parser.add_argument("--positions-path", type=Path)
     parser.add_argument("--market-snapshot-path", type=Path)
@@ -43,6 +45,8 @@ def main(argv: list[str] | None = None) -> int:
         positions_path=args.positions_path,
         market_snapshot_path=args.market_snapshot_path,
         market_replay_mode=args.market_replay_mode,
+        tick_fill_model=args.tick_fill_model,
+        time_in_force=args.time_in_force,
         tick_input_path=args.tick_input_path,
         position_cost_basis_path=args.position_cost_basis_path,
         force=args.force,

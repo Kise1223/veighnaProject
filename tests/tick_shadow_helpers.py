@@ -16,6 +16,8 @@ def make_tick_row(
     last_price: str,
     bid_price_1: str | None = None,
     ask_price_1: str | None = None,
+    bid_volume_1: str | None = None,
+    ask_volume_1: str | None = None,
     raw_hash: str | None = None,
     received_ts: datetime | None = None,
     source_seq: str | None = None,
@@ -30,6 +32,8 @@ def make_tick_row(
         "last_price": last_price,
         "bid_price_1": bid_price_1,
         "ask_price_1": ask_price_1,
+        "bid_volume_1": bid_volume_1,
+        "ask_volume_1": ask_volume_1,
         "raw_hash": raw_hash or f"{instrument_key}_{exchange_ts.isoformat()}",
         "source_seq": source_seq,
     }

@@ -1,5 +1,7 @@
 market_replay_mode: bars_1m
 fill_model_name: bar_limit_shadow_v1
+tick_fill_model: crossing_full_fill_v1
+time_in_force: DAY
 order_type: LIMIT
 limit_price_source: reference_price
 fill_price_rule: limit_price
