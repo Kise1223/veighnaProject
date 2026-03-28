@@ -1,0 +1,9 @@
+milestone: M12
+title: Portfolio / Risk Analytics
+status: done
+acceptance:
+  - paper and shadow runs can be normalized into one portfolio analytics view
+  - single-run portfolio analytics artifacts are generated file-first with deterministic drift, concentration, cash, turnover, and PnL metrics
+  - cross-run comparison supports planned_vs_executed, bars_vs_ticks, full_vs_partial, day_vs_ioc, and paper_vs_shadow
+  - multiple source matches require explicit selection or --latest
+  - README, ADR, runbook, SQL DDL, and tests are updated
