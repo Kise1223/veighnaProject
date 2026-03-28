@@ -1,0 +1,10 @@
+milestone: M13
+title: Benchmark / Attribution Analytics
+status: done
+acceptance:
+  - benchmark reference artifacts can be built from custom weights and equal-weight target universes
+  - single-run benchmark-relative analytics are generated file-first on top of M12 portfolio analytics
+  - active share, benchmark-relative concentration, and attribution proxies are deterministic and documented
+  - cross-run comparison supports bars_vs_ticks, full_vs_partial, day_vs_ioc, and paper_vs_shadow
+  - multiple source matches require explicit selection or --latest
+  - README, ADR, runbook, SQL DDL, and tests are updated
