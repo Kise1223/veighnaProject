@@ -1,0 +1,13 @@
+items:
+  - id: m14-campaign-shadow
+    title: Shadow walk-forward campaign orchestration
+    status: done
+  - id: m14-campaign-timeseries
+    title: Campaign time-series and summary analytics
+    status: done
+  - id: m14-campaign-compare
+    title: Cross-campaign comparison for bars_vs_ticks/full_vs_partial/day_vs_ioc/paper_vs_shadow
+    status: done
+  - id: m14-paper-optional
+    title: Optional paper execution source support
+    status: done

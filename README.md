@@ -1,6 +1,6 @@
 # VeighNa Quant Platform
 
-This repository implements the first twelve milestones of an A-share quant platform:
+This repository implements the first fourteen milestones of an A-share quant platform:
 
 - `M0`: repository bootstrap and local developer tooling
 - `M1`: master data schemas, A-share rules engine, and bootstrap loader
@@ -16,10 +16,11 @@ This repository implements the first twelve milestones of an A-share quant platf
 - `M11`: file-first execution analytics / TCA over `M7-M10` paper and shadow artifacts, including cross-run comparison
 - `M12`: file-first portfolio / risk analytics over `M6-M11` artifacts, including planned-vs-executed drift and cross-run portfolio comparison
 - `M13`: file-first benchmark / attribution analytics on top of `M12` portfolio analytics, including benchmark-relative active share, concentration deltas, and cross-run benchmark comparison
+- `M14`: file-first multi-date walk-forward campaign orchestration over existing `M5-M13` steps, including campaign day indexing, time-series analytics, campaign summaries, and cross-campaign comparison
 
 ## Scope Freeze
 
-- Supported in `M0-M13`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, the `M7` one-shot paper execution sandbox and local ledger, the `M8` bar-driven replay shadow session, the `M9` tick-driven replay shadow session, the `M10` L1 top-of-book constrained partial-fill shadow session, the `M11` execution analytics / TCA layer for `M7-M10` artifacts, the `M12` portfolio / risk analytics layer for planned-vs-executed outcome measurement, and the `M13` benchmark / attribution analytics layer for benchmark-relative portfolio posture and comparison
+- Supported in `M0-M14`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, the `M7` one-shot paper execution sandbox and local ledger, the `M8` bar-driven replay shadow session, the `M9` tick-driven replay shadow session, the `M10` L1 top-of-book constrained partial-fill shadow session, the `M11` execution analytics / TCA layer for `M7-M10` artifacts, the `M12` portfolio / risk analytics layer for planned-vs-executed outcome measurement, the `M13` benchmark / attribution analytics layer for benchmark-relative portfolio posture and comparison, and the `M14` walk-forward campaign orchestration and time-series analytics layer over existing `M5-M13` artifacts
 - Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, live order placement, real order routing via `send_order`, broker sync, long-running signal service processes, multi-account scheduling, optimizers, queue position simulation, full order-book simulation, stochastic fill models, and large-scale historical backfill
 
 ## Canonical Interpreter
@@ -81,7 +82,7 @@ libs/marketdata/      M4 recorder, ETL, DQ, adjustment, and qlib export helpers
 libs/research/        M5 research artifact schemas, lineage, and file-first storage
 libs/planning/        M6 target-weight, rebalance, and dry-run bridge helpers
 libs/execution/       M7 paper execution, M8 shadow session, fill model, local ledger, and reconcile helpers
-libs/analytics/       M11 execution analytics / TCA, M12 portfolio analytics, and M13 benchmark / attribution helpers
+libs/analytics/       M11 execution analytics / TCA, M12 portfolio analytics, M13 benchmark / attribution helpers, and M14 walk-forward campaign orchestration
 libs/schemas/         pydantic schemas and canonical identifiers
 libs/rules_engine/    A-share rule snapshots, phases, validation, and costs
 infra/sql/postgres/   bootstrap SQL and schema definitions
@@ -108,6 +109,7 @@ scripts/              local developer entrypoints and ETL/loader CLIs
 - `M11` execution analytics remains file-first in `data/analytics/` and only analyzes existing `M7-M10` artifacts; it does not rerun execution or route orders.
 - `M12` portfolio / risk analytics remains file-first in `data/analytics/` and only analyzes existing `M6-M11` artifacts; it does not replay execution, route orders, or introduce a separate portfolio engine.
 - `M13` benchmark / attribution analytics remains file-first in `data/analytics/` and only analyzes existing `M12` portfolio analytics plus benchmark reference artifacts; it does not replay execution, route orders, or introduce a separate attribution engine.
+- `M14` walk-forward campaign analytics remains file-first in `data/analytics/` and only orchestrates and aggregates existing `M5-M13` artifact producers across a date range; it does not retrain models on a rolling schedule, replay execution from scratch, or introduce a separate campaign execution stack.
 
 ## M5 Workflow
 
@@ -129,7 +131,7 @@ Training is idempotent by config and lineage hash. Re-running the same baseline 
 
 `scripts.build_standard_data --rebuild` means partition rebuild, not append. The target `trade_date/exchange/symbol` partition is cleared before rewriting, matching manifests are replaced, and adjustment factors are rebuilt from the deduplicated standard layer. Raw DQ time-order checks follow original ingest order; if `ingest_seq` exists it is treated as the canonical write order, otherwise parquet row order is used.
 
-See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md), [M8 Replay-Driven Shadow Session](docs/adr/0008_m8_shadow_session.md), [M9 Tick-Replay Shadow Session](docs/adr/0009_m9_tick_replay_shadow.md), [M10 L1 Partial-Fill Tick Shadow Session](docs/adr/0010_m10_l1_partial_fill_shadow.md), [M11 Execution Analytics / TCA](docs/adr/0011_m11_execution_analytics_tca.md), [M12 Portfolio / Risk Analytics](docs/adr/0012_m12_portfolio_risk_analytics.md), and [M13 Benchmark / Attribution Analytics](docs/adr/0013_m13_benchmark_attribution_analytics.md) for the frozen implementation contracts.
+See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md), [M8 Replay-Driven Shadow Session](docs/adr/0008_m8_shadow_session.md), [M9 Tick-Replay Shadow Session](docs/adr/0009_m9_tick_replay_shadow.md), [M10 L1 Partial-Fill Tick Shadow Session](docs/adr/0010_m10_l1_partial_fill_shadow.md), [M11 Execution Analytics / TCA](docs/adr/0011_m11_execution_analytics_tca.md), [M12 Portfolio / Risk Analytics](docs/adr/0012_m12_portfolio_risk_analytics.md), [M13 Benchmark / Attribution Analytics](docs/adr/0013_m13_benchmark_attribution_analytics.md), and [M14 Walk-Forward Campaign](docs/adr/0014_m14_walkforward_campaign.md) for the frozen implementation contracts.
 
 ## M6 Workflow
 
@@ -347,3 +349,33 @@ Benchmark-relative metrics stay deterministic and explainable:
 Benchmark comparison supports `bars_vs_ticks`, `full_vs_partial`, `day_vs_ioc`, `paper_vs_shadow`, and other benchmark-relative comparisons over the same benchmark. Comparisons operate on the intersection of `instrument_key`; unmatched instruments are recorded in `summary_json` instead of being silently aligned.
 
 Selector semantics mirror `M11/M12`: benchmark analytics can be selected by `--portfolio-analytics-run-id`, `--paper-run-id`, `--shadow-run-id`, or `trade_date + account_id + basket_id + --latest`. If multiple sources match and `--latest` is omitted, the command errors explicitly. Benchmark reference, benchmark analytics, and benchmark compare artifacts are idempotent by source run ids plus config hash; successful runs are reused by default, failed runs can rerun, and `--force` rebuilds the same deterministic artifact path without silent overwrite.
+
+## M14 Workflow
+
+Run a small walk-forward campaign over an explicit trade-date range on top of the existing `M5-M13` chain:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.run_walkforward_campaign --date-start 2026-03-24 --date-end 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --latest-model --execution-source-type shadow --market-replay-mode bars_1m --benchmark-source-type equal_weight_target_universe
+.\.venv\Scripts\python.exe -m scripts.run_walkforward_campaign --date-start 2026-03-24 --date-end 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --latest-model --execution-source-type shadow --market-replay-mode ticks_l1 --tick-fill-model l1_partial_fill_v1 --time-in-force DAY --benchmark-source-type equal_weight_target_universe
+.\.venv\Scripts\python.exe -m scripts.list_campaigns
+.\.venv\Scripts\python.exe -m scripts.compare_campaigns --left-campaign-run-id <bars_campaign_run_id> --right-campaign-run-id <ticks_partial_day_campaign_run_id> --compare-basis bars_vs_ticks
+```
+
+`M14` is orchestration-plus-analytics only and still paper-only. It does not retrain on a rolling schedule, does not call real `send_order`, and does not introduce a new execution stack. Instead, it resolves one explicit `model_run_id` or the latest successful `model_run` once for the full date window, then reuses existing `M5-M13` artifact producers day by day: prediction, target weights, execution task, paper/shadow execution source, `M11` execution analytics, `M12` portfolio analytics, and optional `M13` benchmark analytics.
+
+Campaign selectors and reuse rules stay explicit:
+
+- `--model-run-id` pins one successful model across the whole range.
+- `--latest-model` is an explicit alias for the default fallback: use the latest successful `model_run` when no `--model-run-id` is supplied.
+- Campaign idempotency key includes `date_start`, `date_end`, `account_id`, `basket_id`, `execution_source_type`, `market_replay_mode`, `tick_fill_model`, `time_in_force`, `benchmark_source_type`, resolved model identity, and `campaign_config_hash`.
+- Successful campaigns are reused by default, failed campaigns can rerun, and `--force` rebuilds the campaign artifacts at the same deterministic path without silent overwrite.
+- Daily rows record whether a day was `success`, `reused`, or `failed`; a fully reused day is one where every upstream daily artifact was already successful and reused.
+
+Campaign metrics prefer existing `M11/M12/M13` summaries rather than recomputing raw execution:
+
+- `daily_fill_rate`, `daily_filled_notional`, and `daily_realized_cost` come from `M11` execution analytics summaries.
+- `daily_weight_drift_l1`, concentration, cash weight, PnL, and `net_liquidation_end` come from `M12` portfolio summaries.
+- `daily_active_share` and `daily_active_contribution_proxy` come from `M13` benchmark summaries when benchmark is enabled; they stay `null` when benchmark is disabled.
+- `max_drawdown` is the deterministic peak-to-trough drawdown of the campaign `net_liquidation_end` time series.
+
+Cross-campaign comparison supports `bars_vs_ticks`, `full_vs_partial`, `day_vs_ioc`, and `paper_vs_shadow`. Comparison only uses overlapping `trade_date` values; left-only and right-only dates are recorded in `summary_json` instead of being silently aligned.
