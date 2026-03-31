@@ -35,6 +35,8 @@ class CampaignCompareBasis(StrEnum):
     FULL_VS_PARTIAL = "full_vs_partial"
     DAY_VS_IOC = "day_vs_ioc"
     PAPER_VS_SHADOW = "paper_vs_shadow"
+    FIXED_VS_ROLLING = "fixed_vs_rolling"
+    RETRAIN_1D_VS_RETRAIN_2D = "retrain_1d_vs_retrain_2d"
 
 
 class CampaignConfig(BaseModel):
@@ -63,7 +65,14 @@ class CampaignRunRecord(BaseModel):
     time_in_force: str | None = None
     benchmark_enabled: bool
     benchmark_source_type: str = Field(min_length=1)
-    model_run_id: str = Field(min_length=1)
+    model_run_id: str | None = None
+    model_schedule_run_id: str | None = None
+    schedule_mode: str | None = None
+    fixed_model_run_id: str | None = None
+    latest_model_resolved_run_id: str | None = None
+    retrain_every_n_trade_days: int | None = Field(default=None, ge=1)
+    training_window_mode: str | None = None
+    lookback_trade_days: int | None = Field(default=None, ge=1)
     campaign_config_hash: str = Field(min_length=1)
     status: CampaignStatus
     created_at: datetime
@@ -83,7 +92,14 @@ class CampaignManifest(BaseModel):
     time_in_force: str | None = None
     benchmark_enabled: bool
     benchmark_source_type: str = Field(min_length=1)
-    model_run_id: str = Field(min_length=1)
+    model_run_id: str | None = None
+    model_schedule_run_id: str | None = None
+    schedule_mode: str | None = None
+    fixed_model_run_id: str | None = None
+    latest_model_resolved_run_id: str | None = None
+    retrain_every_n_trade_days: int | None = Field(default=None, ge=1)
+    training_window_mode: str | None = None
+    lookback_trade_days: int | None = Field(default=None, ge=1)
     campaign_config_hash: str = Field(min_length=1)
     status: CampaignStatus
     created_at: datetime
@@ -107,6 +123,8 @@ class CampaignDayRowRecord(BaseModel):
     trade_date: date
     day_status: CampaignDayStatus
     model_run_id: str = Field(min_length=1)
+    model_schedule_run_id: str | None = None
+    schedule_action: str | None = None
     prediction_run_id: str | None = None
     strategy_run_id: str | None = None
     execution_task_id: str | None = None
@@ -116,6 +134,11 @@ class CampaignDayRowRecord(BaseModel):
     portfolio_analytics_run_id: str | None = None
     benchmark_run_id: str | None = None
     benchmark_analytics_run_id: str | None = None
+    train_start: date | None = None
+    train_end: date | None = None
+    model_switch_flag: bool | None = None
+    model_age_trade_days: int | None = Field(default=None, ge=0)
+    days_since_last_retrain: int | None = Field(default=None, ge=0)
     reused_flags_json: dict[str, JsonScalar | Sequence[JsonScalar]] = Field(default_factory=dict)
     error_summary: str | None = None
     created_at: datetime
@@ -141,6 +164,9 @@ class CampaignTimeseriesRowRecord(BaseModel):
     daily_hhi_concentration: Decimal = Field(ge=Decimal("0"))
     daily_active_share: Decimal | None = None
     daily_active_contribution_proxy: Decimal | None = None
+    daily_model_switch_flag: bool | None = None
+    daily_model_age_trade_days: int | None = Field(default=None, ge=0)
+    daily_days_since_last_retrain: int | None = Field(default=None, ge=0)
     replay_mode: str | None = None
     fill_model_name: str | None = None
     time_in_force: str | None = None
@@ -170,6 +196,10 @@ class CampaignSummaryRecord(BaseModel):
     final_active_share: Decimal | None = None
     cumulative_active_contribution_proxy: Decimal | None = None
     max_drawdown: Decimal = Field(ge=Decimal("0"))
+    unique_model_count: int = Field(default=0, ge=0)
+    retrain_count: int = Field(default=0, ge=0)
+    average_model_age_trade_days: Decimal | None = None
+    max_model_age_trade_days: int | None = Field(default=None, ge=0)
     summary_json: dict[str, JsonScalar | Sequence[JsonScalar]] = Field(default_factory=dict)
     created_at: datetime
 
@@ -185,6 +215,7 @@ class CampaignCompareRunRecord(BaseModel):
     status: CampaignStatus
     created_at: datetime
     source_model_run_ids: list[str] = Field(default_factory=list)
+    source_model_schedule_run_ids: list[str] = Field(default_factory=list)
     source_prediction_run_ids: list[str] = Field(default_factory=list)
     source_strategy_run_ids: list[str] = Field(default_factory=list)
     source_execution_task_ids: list[str] = Field(default_factory=list)
@@ -216,6 +247,7 @@ class CampaignCompareManifest(BaseModel):
     summary_file_hash: str | None = None
     error_message: str | None = None
     source_model_run_ids: list[str] = Field(default_factory=list)
+    source_model_schedule_run_ids: list[str] = Field(default_factory=list)
     source_prediction_run_ids: list[str] = Field(default_factory=list)
     source_strategy_run_ids: list[str] = Field(default_factory=list)
     source_execution_task_ids: list[str] = Field(default_factory=list)
@@ -250,6 +282,9 @@ class CampaignCompareDayRowRecord(BaseModel):
     left_active_contribution_proxy: Decimal | None = None
     right_active_contribution_proxy: Decimal | None = None
     delta_active_contribution_proxy: Decimal | None = None
+    left_model_age_trade_days: int | None = Field(default=None, ge=0)
+    right_model_age_trade_days: int | None = Field(default=None, ge=0)
+    delta_model_age_trade_days: int | None = None
     created_at: datetime
 
     model_config = ConfigDict(extra="forbid")
@@ -270,6 +305,9 @@ class CampaignCompareSummaryRecord(BaseModel):
     delta_final_top5_concentration: Decimal
     delta_max_drawdown: Decimal
     delta_cumulative_active_contribution_proxy: Decimal | None = None
+    delta_unique_model_count: int = 0
+    delta_retrain_count: int = 0
+    delta_average_model_age_trade_days: Decimal | None = None
     summary_json: dict[str, JsonScalar | Sequence[JsonScalar]] = Field(default_factory=dict)
     created_at: datetime
 
@@ -278,7 +316,7 @@ class CampaignCompareSummaryRecord(BaseModel):
 
 class CampaignLineage(BaseModel):
     campaign_run_id: str = Field(min_length=1)
-    model_run_id: str = Field(min_length=1)
+    model_run_id: str | None = None
     day_row_count: int = Field(ge=0)
     run_file_path: str = Field(min_length=1)
     run_file_hash: str = Field(min_length=1)

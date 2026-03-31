@@ -43,6 +43,8 @@ def compare_campaigns(
         {
             "left_campaign_run_id": left_campaign_run_id,
             "right_campaign_run_id": right_campaign_run_id,
+            "left_model_schedule_run_id": left_manifest.model_schedule_run_id,
+            "right_model_schedule_run_id": right_manifest.model_schedule_run_id,
             "compare_basis": basis.value,
             "compare_config_hash": config_hash,
         }
@@ -89,6 +91,10 @@ def compare_campaigns(
         source_model_run_ids=_merge_unique(
             left_day_rows["model_run_id"].tolist(),
             right_day_rows["model_run_id"].tolist(),
+        ),
+        source_model_schedule_run_ids=_merge_unique(
+            _non_null_series(left_day_rows, "model_schedule_run_id"),
+            _non_null_series(right_day_rows, "model_schedule_run_id"),
         ),
         source_prediction_run_ids=_merge_unique(
             _non_null_series(left_day_rows, "prediction_run_id"),
@@ -210,6 +216,8 @@ def _build_compare_rows_and_summary(
         right_active_share = _optional_decimal(right_row.get("daily_active_share"))
         left_active_contribution = _optional_decimal(left_row.get("daily_active_contribution_proxy"))
         right_active_contribution = _optional_decimal(right_row.get("daily_active_contribution_proxy"))
+        left_model_age_trade_days = _optional_int(left_row.get("daily_model_age_trade_days"))
+        right_model_age_trade_days = _optional_int(right_row.get("daily_model_age_trade_days"))
         rows.append(
             CampaignCompareDayRowRecord(
                 campaign_compare_run_id=campaign_compare_run_id,
@@ -248,6 +256,13 @@ def _build_compare_rows_and_summary(
                     if left_active_contribution is not None and right_active_contribution is not None
                     else None
                 ),
+                left_model_age_trade_days=left_model_age_trade_days,
+                right_model_age_trade_days=right_model_age_trade_days,
+                delta_model_age_trade_days=(
+                    right_model_age_trade_days - left_model_age_trade_days
+                    if left_model_age_trade_days is not None and right_model_age_trade_days is not None
+                    else None
+                ),
                 created_at=created_at,
             )
         )
@@ -266,6 +281,8 @@ def _build_compare_rows_and_summary(
             "right_time_in_force": right_manifest.time_in_force,
             "left_benchmark_enabled": left_manifest.benchmark_enabled,
             "right_benchmark_enabled": right_manifest.benchmark_enabled,
+            "left_model_schedule_run_id": left_manifest.model_schedule_run_id,
+            "right_model_schedule_run_id": right_manifest.model_schedule_run_id,
         },
     )
     summary = CampaignCompareSummaryRecord(
@@ -305,6 +322,16 @@ def _build_compare_rows_and_summary(
             and left_summary.cumulative_active_contribution_proxy is not None
             else None
         ),
+        delta_unique_model_count=right_summary.unique_model_count - left_summary.unique_model_count,
+        delta_retrain_count=right_summary.retrain_count - left_summary.retrain_count,
+        delta_average_model_age_trade_days=(
+            quantize_weight(
+                right_summary.average_model_age_trade_days - left_summary.average_model_age_trade_days
+            )
+            if right_summary.average_model_age_trade_days is not None
+            and left_summary.average_model_age_trade_days is not None
+            else None
+        ),
         summary_json=summary_json,
         created_at=created_at,
     )
@@ -336,3 +363,15 @@ def _optional_decimal(value: object | None) -> Decimal | None:
     if value is None:
         return None
     return Decimal(str(value))
+
+
+def _optional_int(value: object | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int | str | Decimal):
+        return int(value)
+    if isinstance(value, float):
+        return int(value)
+    raise TypeError(f"unsupported integer-like compare field value: {value!r}")

@@ -1,0 +1,13 @@
+items:
+  - id: m15-fixed-model
+    title: Fixed-model schedule compatibility over M14 campaigns
+    status: done
+  - id: m15-retrain-n-days
+    title: Retrain-every-n-trade-days schedule
+    status: done
+  - id: m15-model-age
+    title: Per-day model-age and switch tracking
+    status: done
+  - id: m15-fixed-vs-rolling-compare
+    title: Fixed-vs-rolling and cadence compare
+    status: done

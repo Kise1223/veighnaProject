@@ -24,7 +24,12 @@ from libs.marketdata.raw_store import stable_hash
 from libs.marketdata.symbol_mapping import InstrumentCatalog
 from libs.research.artifacts import ResearchArtifactStore
 from libs.research.lineage import load_qlib_export_lineage
-from libs.research.schemas import ModelRunRecord, PredictionRecord, ResearchRunStatus
+from libs.research.schemas import (
+    BaselineDatasetConfig,
+    ModelRunRecord,
+    PredictionRecord,
+    ResearchRunStatus,
+)
 
 DEFAULT_BASE_CONFIG = Path("configs/qlib/base.yaml")
 DEFAULT_DATASET_CONFIG = Path("configs/qlib/dataset_baseline.yaml")
@@ -37,10 +42,11 @@ def train_baseline_workflow(
     base_config_path: Path = DEFAULT_BASE_CONFIG,
     dataset_config_path: Path = DEFAULT_DATASET_CONFIG,
     model_config_path: Path = DEFAULT_MODEL_CONFIG,
+    dataset_config_override: BaselineDatasetConfig | None = None,
     force: bool = False,
 ) -> dict[str, object]:
     runtime_config = load_runtime_config(project_root / base_config_path)
-    dataset_config = load_dataset_config(project_root / dataset_config_path)
+    dataset_config = dataset_config_override or load_dataset_config(project_root / dataset_config_path)
     model_config = load_model_config(project_root / model_config_path)
     catalog = InstrumentCatalog.from_bootstrap_dir(project_root / "data" / "master" / "bootstrap")
     store = ResearchArtifactStore(project_root, project_root / runtime_config.artifacts_root)

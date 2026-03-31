@@ -28,6 +28,9 @@ def build_campaign_timeseries_row(
     execution_summary: ExecutionTcaSummaryRecord,
     portfolio_summary: PortfolioSummaryRecord,
     benchmark_summary: BenchmarkSummaryRowRecord | None,
+    model_switch_flag: bool | None,
+    model_age_trade_days: int | None,
+    days_since_last_retrain: int | None,
     replay_mode: str | None,
     fill_model_name: str | None,
     time_in_force: str | None,
@@ -55,6 +58,9 @@ def build_campaign_timeseries_row(
             if benchmark_summary is not None
             else None
         ),
+        daily_model_switch_flag=model_switch_flag,
+        daily_model_age_trade_days=model_age_trade_days,
+        daily_days_since_last_retrain=days_since_last_retrain,
         replay_mode=replay_mode,
         fill_model_name=fill_model_name,
         time_in_force=time_in_force,
@@ -77,24 +83,37 @@ def build_campaign_summary(
     reused_day_count = sum(1 for item in day_rows if item.day_status.value == "reused")
     failed_day_count = sum(1 for item in day_rows if item.day_status.value == "failed")
     active_shares = [item.daily_active_share for item in ordered if item.daily_active_share is not None]
+    model_ages = [
+        Decimal(str(item.daily_model_age_trade_days))
+        for item in ordered
+        if item.daily_model_age_trade_days is not None
+    ]
     active_contribution_values = [
         item.daily_active_contribution_proxy
         for item in ordered
         if item.daily_active_contribution_proxy is not None
     ]
     average_active_share = _mean_decimal(active_shares)
+    average_model_age_trade_days = _mean_decimal(model_ages)
     cumulative_active_contribution_proxy = (
         sum(active_contribution_values, _ZERO).quantize(Decimal("0.000001"))
         if active_contribution_values
         else None
     )
     final_row = ordered[-1]
+    unique_model_count = len({item.model_run_id for item in day_rows if item.model_run_id})
+    retrain_count = sum(
+        1
+        for item in day_rows
+        if item.schedule_action == "retrained_new_model"
+    )
     summary_json = cast(
         dict[str, JsonScalar | Sequence[JsonScalar]],
         {
             "trade_dates": [item.trade_date.isoformat() for item in ordered],
             "active_metrics_enabled": bool(active_shares or active_contribution_values),
             "max_drawdown_mode": "peak_to_trough_net_liquidation_end",
+            "model_schedule_enabled": any(item.model_schedule_run_id is not None for item in day_rows),
         },
     )
     return CampaignSummaryRecord(
@@ -124,6 +143,13 @@ def build_campaign_summary(
         final_active_share=final_row.daily_active_share,
         cumulative_active_contribution_proxy=cumulative_active_contribution_proxy,
         max_drawdown=compute_max_drawdown([item.net_liquidation_end for item in ordered]),
+        unique_model_count=unique_model_count,
+        retrain_count=retrain_count,
+        average_model_age_trade_days=average_model_age_trade_days,
+        max_model_age_trade_days=max(
+            (item.daily_model_age_trade_days for item in ordered if item.daily_model_age_trade_days is not None),
+            default=None,
+        ),
         summary_json=summary_json,
         created_at=created_at,
     )
