@@ -20,10 +20,12 @@ class ModelScheduleStatus(StrEnum):
 class ModelScheduleMode(StrEnum):
     FIXED_MODEL = "fixed_model"
     RETRAIN_EVERY_N_TRADE_DAYS = "retrain_every_n_trade_days"
+    EXPLICIT_MODEL_SCHEDULE = "explicit_model_schedule"
 
 
 class TrainingWindowMode(StrEnum):
     EXPANDING_TO_PRIOR_DAY = "expanding_to_prior_day"
+    ROLLING_LOOKBACK = "rolling_lookback"
 
 
 class ModelScheduleAction(StrEnum):
@@ -102,11 +104,14 @@ class ModelScheduleDayRowRecord(BaseModel):
     schedule_action: ModelScheduleAction
     resolved_model_run_id: str = Field(min_length=1)
     resolved_prediction_run_id: str | None = None
-    train_start: date
-    train_end: date
+    train_start: date | None = None
+    train_end: date | None = None
     model_switch_flag: bool
     model_age_trade_days: int = Field(ge=0)
     days_since_last_retrain: int = Field(ge=0)
+    strict_no_lookahead_expected: bool | None = None
+    strict_no_lookahead_passed: bool | None = None
+    schedule_warning_code: str | None = None
     day_status: str = Field(min_length=1)
     reused_flags_json: dict[str, JsonScalar | Sequence[JsonScalar]] = Field(default_factory=dict)
     error_summary: str | None = None

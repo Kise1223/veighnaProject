@@ -37,6 +37,9 @@ class CampaignCompareBasis(StrEnum):
     PAPER_VS_SHADOW = "paper_vs_shadow"
     FIXED_VS_ROLLING = "fixed_vs_rolling"
     RETRAIN_1D_VS_RETRAIN_2D = "retrain_1d_vs_retrain_2d"
+    EXPANDING_VS_ROLLING_LOOKBACK = "expanding_vs_rolling_lookback"
+    EXPLICIT_SCHEDULE_VS_FIXED = "explicit_schedule_vs_fixed"
+    EXPLICIT_SCHEDULE_VS_RETRAIN_1D = "explicit_schedule_vs_retrain_1d"
 
 
 class CampaignConfig(BaseModel):
@@ -139,6 +142,9 @@ class CampaignDayRowRecord(BaseModel):
     model_switch_flag: bool | None = None
     model_age_trade_days: int | None = Field(default=None, ge=0)
     days_since_last_retrain: int | None = Field(default=None, ge=0)
+    strict_no_lookahead_expected: bool | None = None
+    strict_no_lookahead_passed: bool | None = None
+    schedule_warning_code: str | None = None
     reused_flags_json: dict[str, JsonScalar | Sequence[JsonScalar]] = Field(default_factory=dict)
     error_summary: str | None = None
     created_at: datetime
@@ -200,6 +206,10 @@ class CampaignSummaryRecord(BaseModel):
     retrain_count: int = Field(default=0, ge=0)
     average_model_age_trade_days: Decimal | None = None
     max_model_age_trade_days: int | None = Field(default=None, ge=0)
+    strict_checked_day_count: int = Field(default=0, ge=0)
+    strict_pass_day_count: int = Field(default=0, ge=0)
+    strict_fail_day_count: int = Field(default=0, ge=0)
+    warning_day_count: int = Field(default=0, ge=0)
     summary_json: dict[str, JsonScalar | Sequence[JsonScalar]] = Field(default_factory=dict)
     created_at: datetime
 
@@ -308,6 +318,8 @@ class CampaignCompareSummaryRecord(BaseModel):
     delta_unique_model_count: int = 0
     delta_retrain_count: int = 0
     delta_average_model_age_trade_days: Decimal | None = None
+    delta_strict_fail_day_count: int = 0
+    delta_warning_day_count: int = 0
     summary_json: dict[str, JsonScalar | Sequence[JsonScalar]] = Field(default_factory=dict)
     created_at: datetime
 

@@ -1,0 +1,16 @@
+{
+  "schedule": [
+    {
+      "trade_date": "2026-03-24",
+      "model_run_id": "model_4589b4cdc90a"
+    },
+    {
+      "trade_date": "2026-03-25",
+      "model_run_id": "model_4589b4cdc90a"
+    },
+    {
+      "trade_date": "2026-03-26",
+      "model_run_id": "model_4589b4cdc90a"
+    }
+  ]
+}

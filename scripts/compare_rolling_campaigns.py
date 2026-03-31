@@ -19,7 +19,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--compare-basis",
         required=True,
-        choices=["fixed_vs_rolling", "retrain_1d_vs_retrain_2d", "bars_vs_ticks", "full_vs_partial", "day_vs_ioc", "paper_vs_shadow"],
+        choices=[
+            "fixed_vs_rolling",
+            "retrain_1d_vs_retrain_2d",
+            "expanding_vs_rolling_lookback",
+            "explicit_schedule_vs_fixed",
+            "explicit_schedule_vs_retrain_1d",
+            "bars_vs_ticks",
+            "full_vs_partial",
+            "day_vs_ioc",
+            "paper_vs_shadow",
+        ],
     )
     parser.add_argument("--force", action="store_true")
     return parser.parse_args(argv)

@@ -31,6 +31,8 @@ from libs.analytics.model_schedule_schemas import (
     ModelScheduleRunRecord,
     ModelScheduleStatus,
 )
+from libs.analytics.schedule_audit import run_schedule_audit
+from libs.analytics.schedule_audit_artifacts import ScheduleAuditArtifactStore
 from libs.common.time import ensure_cn_aware
 from libs.marketdata.raw_store import file_sha256, stable_hash
 
@@ -48,6 +50,7 @@ def run_rolling_campaign(
     retrain_every_n_trade_days: int | None = None,
     training_window_mode: str = "expanding_to_prior_day",
     lookback_trade_days: int | None = None,
+    schedule_path: Path | None = None,
     execution_source_type: str = "shadow",
     market_replay_mode: str | None = None,
     tick_fill_model: str | None = None,
@@ -95,6 +98,7 @@ def run_rolling_campaign(
         retrain_every_n_trade_days=retrain_every_n_trade_days,
         training_window_mode=training_window_mode,
         lookback_trade_days=lookback_trade_days,
+        schedule_path=schedule_path,
         benchmark_enabled=benchmark_enabled,
         benchmark_source_type=benchmark_source_type,
         campaign_config_hash=campaign_config_hash,
@@ -121,6 +125,22 @@ def run_rolling_campaign(
     )
     campaign_store = CampaignArtifactStore(project_root)
     schedule_store = ModelScheduleArtifactStore(project_root)
+    audit_store = ScheduleAuditArtifactStore(project_root)
+    schedule_audit_result = run_schedule_audit(
+        project_root=project_root,
+        schedule=schedule,
+        date_start=date_start,
+        date_end=date_end,
+        account_id=account_id,
+        basket_id=basket_id,
+        explicit_schedule_path=(str(schedule_path) if schedule_path is not None else None),
+        force=force,
+    )
+    schedule_audit_run_id = str(schedule_audit_result["schedule_audit_run_id"])
+    audit_day_rows_frame = audit_store.load_audit_day_rows(schedule_audit_run_id=schedule_audit_run_id)
+    audit_by_trade_date = {
+        item["trade_date"]: item for item in audit_day_rows_frame.to_dict(orient="records")
+    }
     if (
         schedule_store.has_schedule_run(
             date_start=date_start,
@@ -136,6 +156,7 @@ def run_rolling_campaign(
             basket_id=basket_id,
             campaign_run_id=campaign_run_id,
         )
+        and audit_store.has_audit_run(schedule_audit_run_id=schedule_audit_run_id)
         and not force
     ):
         existing_schedule = schedule_store.load_schedule_run(
@@ -172,6 +193,7 @@ def run_rolling_campaign(
             )
             return {
                 "model_schedule_run_id": schedule.model_schedule_run_id,
+                "schedule_audit_run_id": schedule_audit_run_id,
                 "campaign_run_id": campaign_run_id,
                 "trade_date_count": manifest.timeseries_row_count,
                 "summary_path": manifest.summary_file_path,
@@ -207,6 +229,23 @@ def run_rolling_campaign(
             basket_id=basket_id,
             campaign_run_id=campaign_run_id,
         )
+    if audit_store.has_audit_run(schedule_audit_run_id=schedule_audit_run_id):
+        audit_store.clear_audit_run(schedule_audit_run_id=schedule_audit_run_id)
+    schedule_audit_result = run_schedule_audit(
+        project_root=project_root,
+        schedule=schedule,
+        date_start=date_start,
+        date_end=date_end,
+        account_id=account_id,
+        basket_id=basket_id,
+        explicit_schedule_path=(str(schedule_path) if schedule_path is not None else None),
+        force=False,
+    )
+    schedule_audit_run_id = str(schedule_audit_result["schedule_audit_run_id"])
+    audit_day_rows_frame = audit_store.load_audit_day_rows(schedule_audit_run_id=schedule_audit_run_id)
+    audit_by_trade_date = {
+        item["trade_date"]: item for item in audit_day_rows_frame.to_dict(orient="records")
+    }
     created_at = ensure_cn_aware(datetime.now())
     schedule_run = ModelScheduleRunRecord(
         model_schedule_run_id=schedule.model_schedule_run_id,
@@ -220,7 +259,7 @@ def run_rolling_campaign(
         retrain_every_n_trade_days=schedule.retrain_every_n_trade_days,
         training_window_mode=schedule.training_window_mode,
         lookback_trade_days=schedule.lookback_trade_days,
-        explicit_schedule_path=None,
+        explicit_schedule_path=(str(schedule_path) if schedule_path is not None else None),
         benchmark_enabled=benchmark_enabled,
         benchmark_source_type=benchmark_source_type,
         campaign_config_hash=schedule.config_hash,
@@ -261,6 +300,7 @@ def run_rolling_campaign(
     net_liquidation_start = None
     try:
         for scheduled_day in schedule.days:
+            audit_row = audit_by_trade_date[scheduled_day.trade_date]
             day_artifacts = _run_campaign_day(
                 project_root=project_root,
                 campaign_run_id=campaign_run_id,
@@ -287,6 +327,13 @@ def run_rolling_campaign(
                     "model_switch_flag": scheduled_day.model_switch_flag,
                     "model_age_trade_days": scheduled_day.model_age_trade_days,
                     "days_since_last_retrain": scheduled_day.days_since_last_retrain,
+                    "strict_no_lookahead_expected": bool(audit_row["strict_no_lookahead_expected"]),
+                    "strict_no_lookahead_passed": bool(audit_row["strict_no_lookahead_passed"]),
+                    "schedule_warning_code": (
+                        str(audit_row["schedule_warning_code"])
+                        if audit_row.get("schedule_warning_code") is not None
+                        else None
+                    ),
                     "reused_flags_json": merged_reused_flags,
                 }
             )
@@ -318,6 +365,13 @@ def run_rolling_campaign(
                     reused_flags_json=schedule_reused_flags_json,
                     error_summary=None,
                     created_at=created_at,
+                    strict_no_lookahead_expected=bool(audit_row["strict_no_lookahead_expected"]),
+                    strict_no_lookahead_passed=bool(audit_row["strict_no_lookahead_passed"]),
+                    schedule_warning_code=(
+                        str(audit_row["schedule_warning_code"])
+                        if audit_row.get("schedule_warning_code") is not None
+                        else None
+                    ),
                     strategy_run_id=patched_day_row.strategy_run_id,
                     execution_task_id=patched_day_row.execution_task_id,
                     paper_run_id=patched_day_row.paper_run_id,
@@ -350,6 +404,13 @@ def run_rolling_campaign(
                 "model_switch_flag": scheduled_day.model_switch_flag,
                 "model_age_trade_days": scheduled_day.model_age_trade_days,
                 "days_since_last_retrain": scheduled_day.days_since_last_retrain,
+                "strict_no_lookahead_expected": bool(audit_by_trade_date[scheduled_day.trade_date]["strict_no_lookahead_expected"]),
+                "strict_no_lookahead_passed": bool(audit_by_trade_date[scheduled_day.trade_date]["strict_no_lookahead_passed"]),
+                "schedule_warning_code": (
+                    str(audit_by_trade_date[scheduled_day.trade_date]["schedule_warning_code"])
+                    if audit_by_trade_date[scheduled_day.trade_date].get("schedule_warning_code") is not None
+                    else None
+                ),
             }
         )
         campaign_day_rows.append(failed_day_row)
@@ -366,6 +427,13 @@ def run_rolling_campaign(
                 model_switch_flag=scheduled_day.model_switch_flag,
                 model_age_trade_days=scheduled_day.model_age_trade_days,
                 days_since_last_retrain=scheduled_day.days_since_last_retrain,
+                strict_no_lookahead_expected=bool(audit_by_trade_date[scheduled_day.trade_date]["strict_no_lookahead_expected"]),
+                strict_no_lookahead_passed=bool(audit_by_trade_date[scheduled_day.trade_date]["strict_no_lookahead_passed"]),
+                schedule_warning_code=(
+                    str(audit_by_trade_date[scheduled_day.trade_date]["schedule_warning_code"])
+                    if audit_by_trade_date[scheduled_day.trade_date].get("schedule_warning_code") is not None
+                    else None
+                ),
                 day_status="failed",
                 reused_flags_json={"model_train_reused": scheduled_day.model_train_reused},
                 error_summary=str(exc),
@@ -411,6 +479,7 @@ def run_rolling_campaign(
     )
     return {
         "model_schedule_run_id": schedule.model_schedule_run_id,
+        "schedule_audit_run_id": schedule_audit_run_id,
         "campaign_run_id": campaign_run_id,
         "trade_date_count": len(timeseries_rows),
         "summary_path": manifest.summary_file_path,

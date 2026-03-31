@@ -107,6 +107,15 @@ def build_campaign_summary(
         for item in day_rows
         if item.schedule_action == "retrained_new_model"
     )
+    strict_checked_day_count = sum(
+        1 for item in day_rows if item.strict_no_lookahead_expected is True
+    )
+    strict_pass_day_count = sum(
+        1
+        for item in day_rows
+        if item.strict_no_lookahead_expected is True and item.strict_no_lookahead_passed is True
+    )
+    warning_day_count = sum(1 for item in day_rows if item.schedule_warning_code is not None)
     summary_json = cast(
         dict[str, JsonScalar | Sequence[JsonScalar]],
         {
@@ -114,6 +123,13 @@ def build_campaign_summary(
             "active_metrics_enabled": bool(active_shares or active_contribution_values),
             "max_drawdown_mode": "peak_to_trough_net_liquidation_end",
             "model_schedule_enabled": any(item.model_schedule_run_id is not None for item in day_rows),
+            "warning_codes": sorted(
+                {
+                    item.schedule_warning_code
+                    for item in day_rows
+                    if item.schedule_warning_code is not None
+                }
+            ),
         },
     )
     return CampaignSummaryRecord(
@@ -150,6 +166,10 @@ def build_campaign_summary(
             (item.daily_model_age_trade_days for item in ordered if item.daily_model_age_trade_days is not None),
             default=None,
         ),
+        strict_checked_day_count=strict_checked_day_count,
+        strict_pass_day_count=strict_pass_day_count,
+        strict_fail_day_count=max(0, strict_checked_day_count - strict_pass_day_count),
+        warning_day_count=warning_day_count,
         summary_json=summary_json,
         created_at=created_at,
     )

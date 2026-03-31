@@ -1,0 +1,13 @@
+items:
+  - id: m16-rolling-lookback
+    title: Rolling lookback schedule mode
+    status: done
+  - id: m16-explicit-schedule
+    title: Explicit per-date model schedule
+    status: done
+  - id: m16-schedule-audit
+    title: File-first no-lookahead audit artifacts
+    status: done
+  - id: m16-schedule-compare
+    title: Schedule realism compare metrics and bases
+    status: done

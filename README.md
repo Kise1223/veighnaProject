@@ -1,6 +1,6 @@
 # VeighNa Quant Platform
 
-This repository implements the first fifteen milestones of an A-share quant platform:
+This repository implements the first sixteen milestones of an A-share quant platform:
 
 - `M0`: repository bootstrap and local developer tooling
 - `M1`: master data schemas, A-share rules engine, and bootstrap loader
@@ -18,10 +18,11 @@ This repository implements the first fifteen milestones of an A-share quant plat
 - `M13`: file-first benchmark / attribution analytics on top of `M12` portfolio analytics, including benchmark-relative active share, concentration deltas, and cross-run benchmark comparison
 - `M14`: file-first multi-date walk-forward campaign orchestration over existing `M5-M13` steps, including campaign day indexing, time-series analytics, campaign summaries, and cross-campaign comparison
 - `M15`: file-first rolling retrain walk-forward campaigns with per-day model refresh scheduling, model-age tracking, and fixed-vs-rolling campaign comparison on top of `M14`
+- `M16`: file-first schedule-realism extensions on top of `M15`, adding `rolling_lookback`, `explicit_model_schedule`, no-lookahead audit artifacts, and schedule-mode comparison
 
 ## Scope Freeze
 
-- Supported in `M0-M15`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, the `M7` one-shot paper execution sandbox and local ledger, the `M8` bar-driven replay shadow session, the `M9` tick-driven replay shadow session, the `M10` L1 top-of-book constrained partial-fill shadow session, the `M11` execution analytics / TCA layer for `M7-M10` artifacts, the `M12` portfolio / risk analytics layer for planned-vs-executed outcome measurement, the `M13` benchmark / attribution analytics layer for benchmark-relative portfolio posture and comparison, the `M14` walk-forward campaign orchestration and time-series analytics layer over existing `M5-M13` artifacts, and the `M15` rolling retrain model-schedule layer on top of those campaigns
+- Supported in `M0-M16`: SSE/SZSE cash equities and ETFs, including the `M6` dry-run bridge from prediction artifacts to approved target weights, rebalance planning, and order-request previews, the `M7` one-shot paper execution sandbox and local ledger, the `M8` bar-driven replay shadow session, the `M9` tick-driven replay shadow session, the `M10` L1 top-of-book constrained partial-fill shadow session, the `M11` execution analytics / TCA layer for `M7-M10` artifacts, the `M12` portfolio / risk analytics layer for planned-vs-executed outcome measurement, the `M13` benchmark / attribution analytics layer for benchmark-relative portfolio posture and comparison, the `M14` walk-forward campaign orchestration and time-series analytics layer over existing `M5-M13` artifacts, the `M15` rolling retrain model-schedule layer on top of those campaigns, and the `M16` schedule-realism / no-lookahead audit layer over `M15`
 - Explicitly out of scope: BSE, convertible bonds, margin trading, stock options, HK Connect, ClickHouse, live order placement, real order routing via `send_order`, broker sync, long-running signal service processes, multi-account scheduling, optimizers, queue position simulation, full order-book simulation, stochastic fill models, and large-scale historical backfill
 
 ## Canonical Interpreter
@@ -83,7 +84,7 @@ libs/marketdata/      M4 recorder, ETL, DQ, adjustment, and qlib export helpers
 libs/research/        M5 research artifact schemas, lineage, and file-first storage
 libs/planning/        M6 target-weight, rebalance, and dry-run bridge helpers
 libs/execution/       M7 paper execution, M8 shadow session, fill model, local ledger, and reconcile helpers
-libs/analytics/       M11 execution analytics / TCA, M12 portfolio analytics, M13 benchmark / attribution helpers, M14 walk-forward campaign orchestration, and M15 rolling model scheduling
+libs/analytics/       M11 execution analytics / TCA, M12 portfolio analytics, M13 benchmark / attribution helpers, M14 walk-forward campaigns, M15 rolling model scheduling, and M16 schedule realism audit helpers
 libs/schemas/         pydantic schemas and canonical identifiers
 libs/rules_engine/    A-share rule snapshots, phases, validation, and costs
 infra/sql/postgres/   bootstrap SQL and schema definitions
@@ -112,6 +113,7 @@ scripts/              local developer entrypoints and ETL/loader CLIs
 - `M13` benchmark / attribution analytics remains file-first in `data/analytics/` and only analyzes existing `M12` portfolio analytics plus benchmark reference artifacts; it does not replay execution, route orders, or introduce a separate attribution engine.
 - `M14` walk-forward campaign analytics remains file-first in `data/analytics/` and only orchestrates and aggregates existing `M5-M13` artifact producers across a date range; it does not retrain models on a rolling schedule, replay execution from scratch, or introduce a separate campaign execution stack.
 - `M15` rolling retrain campaigns remain file-first in `data/analytics/` and only extend `M14` with trade-date-boundary model refresh scheduling; they do not introduce intraday model switching, a daemon scheduler, or any live routing.
+- `M16` schedule realism artifacts remain file-first in `data/analytics/` and only audit or extend existing `M15` schedules; they do not introduce a new execution stack, a live scheduler, or any real routing.
 
 ## M5 Workflow
 
@@ -133,7 +135,7 @@ Training is idempotent by config and lineage hash. Re-running the same baseline 
 
 `scripts.build_standard_data --rebuild` means partition rebuild, not append. The target `trade_date/exchange/symbol` partition is cleared before rewriting, matching manifests are replaced, and adjustment factors are rebuilt from the deduplicated standard layer. Raw DQ time-order checks follow original ingest order; if `ingest_seq` exists it is treated as the canonical write order, otherwise parquet row order is used.
 
-See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md), [M8 Replay-Driven Shadow Session](docs/adr/0008_m8_shadow_session.md), [M9 Tick-Replay Shadow Session](docs/adr/0009_m9_tick_replay_shadow.md), [M10 L1 Partial-Fill Tick Shadow Session](docs/adr/0010_m10_l1_partial_fill_shadow.md), [M11 Execution Analytics / TCA](docs/adr/0011_m11_execution_analytics_tca.md), [M12 Portfolio / Risk Analytics](docs/adr/0012_m12_portfolio_risk_analytics.md), [M13 Benchmark / Attribution Analytics](docs/adr/0013_m13_benchmark_attribution_analytics.md), [M14 Walk-Forward Campaign](docs/adr/0014_m14_walkforward_campaign.md), and [M15 Rolling Retrain Campaign](docs/adr/0015_m15_rolling_retrain_campaign.md) for the frozen implementation contracts.
+See [ADR Template](docs/adr/ADR_TEMPLATE.md), [M0-M2 Contracts](docs/adr/0001_m0_m2_contracts.md), [Trade Server Runtime](docs/adr/0003_trade_server_runtime.md), [M4 Data Foundation](docs/adr/0004_m4_data_foundation.md), [M5 Qlib Baseline Workflow](docs/adr/0005_m5_qlib_baseline.md), [M6 Research-to-Trade Bridge](docs/adr/0006_m6_research_trade_bridge.md), [M7 Paper Execution Sandbox](docs/adr/0007_m7_paper_execution.md), [M8 Replay-Driven Shadow Session](docs/adr/0008_m8_shadow_session.md), [M9 Tick-Replay Shadow Session](docs/adr/0009_m9_tick_replay_shadow.md), [M10 L1 Partial-Fill Tick Shadow Session](docs/adr/0010_m10_l1_partial_fill_shadow.md), [M11 Execution Analytics / TCA](docs/adr/0011_m11_execution_analytics_tca.md), [M12 Portfolio / Risk Analytics](docs/adr/0012_m12_portfolio_risk_analytics.md), [M13 Benchmark / Attribution Analytics](docs/adr/0013_m13_benchmark_attribution_analytics.md), [M14 Walk-Forward Campaign](docs/adr/0014_m14_walkforward_campaign.md), [M15 Rolling Retrain Campaign](docs/adr/0015_m15_rolling_retrain_campaign.md), and [M16 Schedule Realism Audit](docs/adr/0016_m16_schedule_realism_audit.md) for the frozen implementation contracts.
 
 ## M6 Workflow
 
@@ -415,3 +417,48 @@ Model schedule metrics are deterministic:
 - Campaign summary now includes `unique_model_count`, `retrain_count`, `average_model_age_trade_days`, and `max_model_age_trade_days`.
 
 Rolling compare uses overlapping trade dates only and supports `fixed_vs_rolling` plus `retrain_1d_vs_retrain_2d`. As in `M14`, unmatched dates are recorded in `summary_json` rather than silently aligned.
+
+## M16 Workflow
+
+Run the schedule-realism extensions on top of the same three-day rolling campaign window:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.run_rolling_campaign --date-start 2026-03-24 --date-end 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --schedule-mode fixed_model --latest-model --execution-source-type shadow --market-replay-mode bars_1m --benchmark-source-type equal_weight_target_universe
+.\.venv\Scripts\python.exe -m scripts.run_rolling_campaign --date-start 2026-03-24 --date-end 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --schedule-mode retrain_every_n_trade_days --retrain-every-n-trade-days 1 --training-window-mode expanding_to_prior_day --execution-source-type shadow --market-replay-mode bars_1m --benchmark-source-type equal_weight_target_universe
+.\.venv\Scripts\python.exe -m scripts.run_rolling_campaign --date-start 2026-03-24 --date-end 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --schedule-mode retrain_every_n_trade_days --retrain-every-n-trade-days 1 --training-window-mode rolling_lookback --lookback-trade-days 2 --execution-source-type shadow --market-replay-mode bars_1m --benchmark-source-type equal_weight_target_universe
+.\.venv\Scripts\python.exe -m scripts.build_explicit_model_schedule_sample --date-start 2026-03-24 --date-end 2026-03-26 --source-model-schedule-run-id <source_schedule_run_id> --output data\bootstrap\model_schedule\explicit_schedule_2026-03-24_2026-03-26.json
+.\.venv\Scripts\python.exe -m scripts.run_rolling_campaign --date-start 2026-03-24 --date-end 2026-03-26 --account-id demo_equity --basket-id baseline_long_only --schedule-mode explicit_model_schedule --schedule-path data\bootstrap\model_schedule\explicit_schedule_2026-03-24_2026-03-26.json --execution-source-type shadow --market-replay-mode bars_1m --benchmark-source-type equal_weight_target_universe
+.\.venv\Scripts\python.exe -m scripts.list_model_schedules
+.\.venv\Scripts\python.exe -m scripts.list_schedule_audits
+.\.venv\Scripts\python.exe -m scripts.compare_rolling_campaigns --left-campaign-run-id <fixed_campaign_run_id> --right-campaign-run-id <expanding_campaign_run_id> --compare-basis fixed_vs_rolling
+.\.venv\Scripts\python.exe -m scripts.compare_rolling_campaigns --left-campaign-run-id <expanding_campaign_run_id> --right-campaign-run-id <rolling_lookback_campaign_run_id> --compare-basis expanding_vs_rolling_lookback
+```
+
+`M16` is still orchestration-plus-analytics only and still paper-only. It extends `M15` with more realistic and inspectable schedule semantics:
+
+- `training_window_mode=rolling_lookback`
+- `schedule_mode=explicit_model_schedule`
+- file-first no-lookahead audit artifacts
+- schedule-mode comparison on top of existing rolling campaigns
+
+The three schedule families now behave as follows:
+
+- `fixed_model`: same as `M15`; one fixed model is used across the whole window.
+- `fixed_model + latest-model`: resolve the latest successful model once at campaign start and freeze it for the entire campaign. This is convenient, but it is not strict historical OOS for early dates when that model was trained after their previous trade date.
+- `retrain_every_n_trade_days + expanding_to_prior_day`: strict historical if `train_end <= previous trade date`.
+- `retrain_every_n_trade_days + rolling_lookback`: strict historical if `train_end <= previous trade date`; `train_start` becomes the last `N` trade days ending at `train_end`, bounded by the earliest available eligible training date.
+- `explicit_model_schedule`: use exactly the configured `model_run_id` for each `trade_date`, with no fallback to latest model.
+
+No-lookahead audit is now first-class and file-first:
+
+- Each rolling campaign produces a `schedule_audit_run`.
+- Per-day audit records store `previous_trade_date`, `strict_no_lookahead_expected`, `strict_no_lookahead_passed`, and `schedule_warning_code`.
+- Typical warning codes are `fixed_latest_frozen_campaign_start_non_strict`, `explicit_schedule_no_train_metadata`, `train_end_after_previous_trade_date`, and `missing_train_window_metadata`.
+
+`model_switch_flag` and `model_age_trade_days` are still deterministic:
+
+- `model_switch_flag` is `true` only when the resolved model id changes from the previous trade date.
+- `model_age_trade_days` is the trade-day distance from `train_end` to the current `trade_date`, clamped at `0` when the metadata window does not imply an older model.
+- `days_since_last_retrain` is `0` on retrain days and increments on later reuse days.
+
+Rolling compare now also supports `expanding_vs_rolling_lookback`, `explicit_schedule_vs_fixed`, and `explicit_schedule_vs_retrain_1d`. As in `M14/M15`, comparisons only use overlapping `trade_date` values and record unmatched dates in `summary_json`.

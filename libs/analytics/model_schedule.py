@@ -13,13 +13,14 @@ from apps.research_qlib.workflow import (
     DEFAULT_DATASET_CONFIG,
     train_baseline_workflow,
 )
+from libs.analytics.explicit_model_schedule import load_explicit_model_schedule
 from libs.analytics.model_schedule_config import default_model_schedule_config
 from libs.analytics.model_schedule_schemas import (
     ModelScheduleAction,
     ModelScheduleMode,
     TrainingWindowMode,
 )
-from libs.marketdata.raw_store import stable_hash
+from libs.marketdata.raw_store import file_sha256, stable_hash
 from libs.research.artifacts import ResearchArtifactStore
 from libs.research.schemas import BaselineDatasetConfig, ModelRunRecord, ResearchRunStatus
 from libs.rules_engine.calendar import is_trade_day, load_calendars
@@ -31,8 +32,8 @@ class ResolvedModelScheduleDay:
     trade_date: date
     schedule_action: ModelScheduleAction
     resolved_model_run_id: str
-    train_start: date
-    train_end: date
+    train_start: date | None
+    train_end: date | None
     model_switch_flag: bool
     model_age_trade_days: int
     days_since_last_retrain: int
@@ -64,6 +65,8 @@ def build_model_schedule_run_id(
     retrain_every_n_trade_days: int | None,
     training_window_mode: TrainingWindowMode,
     lookback_trade_days: int | None,
+    explicit_schedule_path: str | None,
+    explicit_schedule_hash: str | None,
     benchmark_enabled: bool,
     benchmark_source_type: str,
     campaign_config_hash: str,
@@ -80,6 +83,8 @@ def build_model_schedule_run_id(
             "retrain_every_n_trade_days": retrain_every_n_trade_days,
             "training_window_mode": training_window_mode.value,
             "lookback_trade_days": lookback_trade_days,
+            "explicit_schedule_path": explicit_schedule_path,
+            "explicit_schedule_hash": explicit_schedule_hash,
             "benchmark_enabled": benchmark_enabled,
             "benchmark_source_type": benchmark_source_type,
             "campaign_config_hash": campaign_config_hash,
@@ -99,6 +104,7 @@ def resolve_model_schedule(
     retrain_every_n_trade_days: int | None = None,
     training_window_mode: str = "expanding_to_prior_day",
     lookback_trade_days: int | None = None,
+    schedule_path: Path | None = None,
     benchmark_enabled: bool,
     benchmark_source_type: str,
     campaign_config_hash: str,
@@ -115,6 +121,15 @@ def resolve_model_schedule(
             raise ValueError("--retrain-every-n-trade-days must be >= 1")
         if model_run_id is not None or latest_model:
             raise ValueError("fixed model selectors are not allowed for retrain_every_n_trade_days")
+        if window_mode == TrainingWindowMode.ROLLING_LOOKBACK and (
+            lookback_trade_days is None or lookback_trade_days < 1
+        ):
+            raise ValueError("--lookback-trade-days must be >= 1 for rolling_lookback")
+    if mode == ModelScheduleMode.EXPLICIT_MODEL_SCHEDULE:
+        if schedule_path is None:
+            raise ValueError("--schedule-path is required for explicit_model_schedule")
+        if model_run_id is not None or latest_model or retrain_every_n_trade_days is not None:
+            raise ValueError("explicit_model_schedule does not accept fixed-model or retrain cadence selectors")
     dataset_config = load_dataset_config(project_root / DEFAULT_DATASET_CONFIG)
     trade_dates_all = _resolve_trade_dates_between(
         project_root=project_root,
@@ -137,7 +152,7 @@ def resolve_model_schedule(
             model_record=model_record,
             trade_index_by_date=trade_index_by_date,
         )
-    else:
+    elif mode == ModelScheduleMode.RETRAIN_EVERY_N_TRADE_DAYS:
         days = _build_retrain_schedule_days(
             project_root=project_root,
             trade_dates=trade_dates,
@@ -149,6 +164,13 @@ def resolve_model_schedule(
             trade_index_by_date=trade_index_by_date,
             force=force,
         )
+    else:
+        days = _build_explicit_schedule_days(
+            project_root=project_root,
+            trade_dates=list(trade_dates),
+            schedule_path=schedule_path or Path(""),
+            trade_index_by_date=trade_index_by_date,
+        )
     config_hash = stable_hash(
         {
             "model_schedule_config": default_model_schedule_config().model_dump(mode="json"),
@@ -158,6 +180,8 @@ def resolve_model_schedule(
             "retrain_every_n_trade_days": retrain_every_n_trade_days,
             "training_window_mode": window_mode.value,
             "lookback_trade_days": lookback_trade_days,
+            "explicit_schedule_path": str(schedule_path) if schedule_path is not None else None,
+            "explicit_schedule_hash": file_sha256(schedule_path) if schedule_path is not None else None,
             "benchmark_enabled": benchmark_enabled,
             "benchmark_source_type": benchmark_source_type,
             "campaign_config_hash": campaign_config_hash,
@@ -175,6 +199,8 @@ def resolve_model_schedule(
             retrain_every_n_trade_days=retrain_every_n_trade_days,
             training_window_mode=window_mode,
             lookback_trade_days=lookback_trade_days,
+            explicit_schedule_path=str(schedule_path) if schedule_path is not None else None,
+            explicit_schedule_hash=file_sha256(schedule_path) if schedule_path is not None else None,
             benchmark_enabled=benchmark_enabled,
             benchmark_source_type=benchmark_source_type,
             campaign_config_hash=campaign_config_hash,
@@ -240,8 +266,6 @@ def _build_retrain_schedule_days(
     trade_index_by_date: dict[date, int],
     force: bool,
 ) -> list[ResolvedModelScheduleDay]:
-    if training_window_mode != TrainingWindowMode.EXPANDING_TO_PRIOR_DAY:
-        raise ValueError(f"unsupported training_window_mode: {training_window_mode.value}")
     days: list[ResolvedModelScheduleDay] = []
     previous_model_run_id: str | None = None
     last_retrain_trade_date: date | None = None
@@ -326,18 +350,25 @@ def _build_dataset_override(
 ) -> BaselineDatasetConfig:
     if training_window_mode == TrainingWindowMode.EXPANDING_TO_PRIOR_DAY:
         train_start = dataset_config.train_start
-    else:
-        if lookback_trade_days is None:
-            raise ValueError("lookback_trade_days is required for rolling_lookback")
-        if lookback_trade_days < 1:
-            raise ValueError("lookback_trade_days must be >= 1")
+    elif training_window_mode == TrainingWindowMode.ROLLING_LOOKBACK:
+        if lookback_trade_days is None or lookback_trade_days < 1:
+            raise ValueError("lookback_trade_days is required and must be >= 1 for rolling_lookback")
         prior_index = trade_dates_all.index(prior_trade_date)
         train_start = trade_dates_all[max(0, prior_index - lookback_trade_days + 1)]
+        min_train_rows = min(
+            dataset_config.min_train_rows,
+            max(1, lookback_trade_days * dataset_config.min_instruments),
+        )
+    else:
+        raise ValueError(f"unsupported training_window_mode: {training_window_mode.value}")
+    if training_window_mode == TrainingWindowMode.EXPANDING_TO_PRIOR_DAY:
+        min_train_rows = dataset_config.min_train_rows
     return dataset_config.model_copy(
         update={
             "train_start": train_start,
             "train_end": prior_trade_date,
             "infer_trade_date": trade_date,
+            "min_train_rows": min_train_rows,
         }
     )
 
@@ -362,6 +393,10 @@ def _load_model_run(*, project_root: Path, run_id: str) -> ModelRunRecord:
     return store.load_run(run_id)
 
 
+def load_model_run_metadata(*, project_root: Path, run_id: str) -> ModelRunRecord | None:
+    return _load_model_run(project_root=project_root, run_id=run_id)
+
+
 def _resolve_trade_dates_between(
     *, project_root: Path, date_start: date, date_end: date
 ) -> list[date]:
@@ -383,6 +418,61 @@ def _previous_trade_date(*, trade_dates_all: Sequence[date], trade_date: date) -
     if current_index == 0:
         return None
     return trade_dates_all[current_index - 1]
+
+
+def _build_explicit_schedule_days(
+    *,
+    project_root: Path,
+    trade_dates: Sequence[date],
+    schedule_path: Path,
+    trade_index_by_date: dict[date, int],
+) -> list[ResolvedModelScheduleDay]:
+    resolved_rows = load_explicit_model_schedule(
+        project_root=project_root,
+        trade_dates=list(trade_dates),
+        schedule_path=schedule_path,
+    )
+    days: list[ResolvedModelScheduleDay] = []
+    previous_model_run_id: str | None = None
+    last_switch_trade_date: date | None = None
+    for index, item in enumerate(resolved_rows):
+        metadata = load_model_run_metadata(project_root=project_root, run_id=item.resolved_model_run_id)
+        train_start = metadata.train_start if metadata is not None else None
+        train_end = metadata.train_end if metadata is not None else None
+        model_switch_flag = False if index == 0 else item.resolved_model_run_id != previous_model_run_id
+        if index == 0 or model_switch_flag:
+            last_switch_trade_date = item.trade_date
+        days.append(
+            ResolvedModelScheduleDay(
+                trade_date=item.trade_date,
+                schedule_action=ModelScheduleAction.EXPLICIT_MODEL,
+                resolved_model_run_id=item.resolved_model_run_id,
+                train_start=train_start,
+                train_end=train_end,
+                model_switch_flag=model_switch_flag,
+                model_age_trade_days=(
+                    _trade_day_distance(
+                        trade_index_by_date=trade_index_by_date,
+                        start_date=train_end,
+                        end_date=item.trade_date,
+                    )
+                    if train_end is not None
+                    else 0
+                ),
+                days_since_last_retrain=(
+                    _trade_day_distance(
+                        trade_index_by_date=trade_index_by_date,
+                        start_date=last_switch_trade_date,
+                        end_date=item.trade_date,
+                    )
+                    if last_switch_trade_date is not None
+                    else 0
+                ),
+                model_train_reused=True,
+            )
+        )
+        previous_model_run_id = item.resolved_model_run_id
+    return days
 
 
 def _trade_day_distance(

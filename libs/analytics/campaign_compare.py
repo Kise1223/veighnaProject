@@ -332,6 +332,12 @@ def _build_compare_rows_and_summary(
             and left_summary.average_model_age_trade_days is not None
             else None
         ),
+        delta_strict_fail_day_count=(
+            right_summary.strict_fail_day_count - left_summary.strict_fail_day_count
+        ),
+        delta_warning_day_count=(
+            right_summary.warning_day_count - left_summary.warning_day_count
+        ),
         summary_json=summary_json,
         created_at=created_at,
     )
